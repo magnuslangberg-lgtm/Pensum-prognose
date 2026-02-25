@@ -1,10 +1,10 @@
-import dynamic from 'next/dynamic'
+import dynamic from 'next/dynamic';
 
-const PensumPrognose = dynamic(
+const PensumPrognoseModell = dynamic(
   () => import('../components/PensumPrognose'),
-  { ssr: false, loading: () => <div style={{display:'flex',justifyContent:'center',alignItems:'center',height:'100vh',fontFamily:'sans-serif'}}>Laster Pensum Prognose...</div> }
-)
+  { ssr: false }
+);
 
 export default function Home() {
-  return <PensumPrognose />
+  return <PensumPrognoseModell />;
 }
