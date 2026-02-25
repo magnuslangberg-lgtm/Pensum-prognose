@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import * as XLSX from 'xlsx';
 
 const PENSUM_LOGO = 'data:image/webp;base64,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';
 
@@ -55,6 +56,117 @@ function beregnAllokering(likvid, pe, eiendom, profilNavn) {
   ];
 }
 
+
+
+const DEFAULT_PENSUM_PRODUKTER = {
+    enkeltfond: [
+      { id: 'norge-a', navn: 'Pensum Norge A', aktivatype: 'aksje', likviditet: 'likvid', aar2024: 21.5, aar2023: 17.7, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
+      { id: 'energy-a', navn: 'Pensum Global Energy A', aktivatype: 'aksje', likviditet: 'likvid', aar2024: 7.3, aar2023: -1.1, aar2022: 11.0, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
+      { id: 'banking-d', navn: 'Pensum Nordic Banking Sector D', aktivatype: 'aksje', likviditet: 'likvid', aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
+      { id: 'financial-d', navn: 'Pensum Financial Opportunity Fund D', aktivatype: 'rente', likviditet: 'likvid', aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null }
+    ],
+    fondsportefoljer: [
+      { id: 'globale-aksjer', navn: 'Pensum Globale Aksjer', aktivatype: 'aksje', likviditet: 'likvid', aar2024: 18.3, aar2023: 17.5, aar2022: -3.7, aar2021: 16.3, aar2020: 14.8, aarlig3ar: 13.6, risiko3ar: 10.7 },
+      { id: 'basis', navn: 'Pensum Basis', aktivatype: 'blandet', likviditet: 'likvid', aar2024: 6.2, aar2023: 13.1, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
+      { id: 'global-hoyrente', navn: 'Pensum Global Høyrente', aktivatype: 'rente', likviditet: 'likvid', aar2024: 6.5, aar2023: 7.9, aar2022: -5.1, aar2021: 5.3, aar2020: 3.0, aarlig3ar: 6.9, risiko3ar: 2.3 },
+      { id: 'nordisk-hoyrente', navn: 'Pensum Nordisk Høyrente', aktivatype: 'rente', likviditet: 'likvid', aar2024: 6.5, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null }
+    ],
+    alternative: [
+      { id: 'turnstone-pe', navn: 'Turnstone Private Equity', aktivatype: 'alternativ', likviditet: 'illikvid', forventetAvkastning: 12.0, aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: 12.0, risiko3ar: null },
+      { id: 'amaron-re', navn: 'Amaron Real Estate', aktivatype: 'alternativ', likviditet: 'illikvid', forventetAvkastning: 12.0, aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: 12.0, risiko3ar: null },
+      { id: 'unoterte-aksjer', navn: 'Unoterte aksjer', aktivatype: 'alternativ', likviditet: 'illikvid', forventetAvkastning: 12.0, aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: 12.0, risiko3ar: null }
+    ]
+  };
+const PENSUM_PRODUCT_STORAGE_KEY = 'pensum_admin_produkter_v1';
+const ADMIN_PASSCODE = 'Pensum2026!';
+
+const deepClone = (value) => JSON.parse(JSON.stringify(value));
+const normalizeText = (value) => (value || '').toString().toLowerCase().replace(/\s+/g, ' ').trim();
+const toNumeric = (value) => {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (value === null || value === undefined || value === '') return null;
+  const cleaned = value.toString().replace(/\s/g, '').replace('%','').replace(',', '.');
+  const num = parseFloat(cleaned);
+  return Number.isFinite(num) ? num : null;
+};
+const toDateValue = (raw) => {
+  if (!raw && raw !== 0) return null;
+  if (raw instanceof Date && !Number.isNaN(raw.getTime())) return raw;
+  if (typeof raw === 'number') {
+    const parsed = XLSX.SSF.parse_date_code(raw);
+    if (parsed) return new Date(parsed.y, parsed.m - 1, parsed.d);
+  }
+  const dt = new Date(raw);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+};
+const nearestPointOnOrBefore = (points, targetDate) => {
+  let candidate = null;
+  for (const point of points) {
+    if (point.date <= targetDate) candidate = point;
+    else break;
+  }
+  return candidate;
+};
+const calculateFeedMetrics = (points) => {
+  if (!points || points.length < 2) return null;
+  const sorted = [...points].sort((a, b) => a.date - b.date);
+  const latest = sorted[sorted.length - 1];
+  const result = {
+    aar2024: null,
+    aar2023: null,
+    aar2022: null,
+    aar2021: null,
+    aar2020: null,
+    aarlig3ar: null,
+    risiko3ar: null,
+    sistOppdatert: latest?.date ? latest.date.toISOString().split('T')[0] : null
+  };
+  [2024, 2023, 2022, 2021, 2020].forEach((year) => {
+    const withinYear = sorted.filter((p) => p.date.getFullYear() === year);
+    if (withinYear.length >= 2) {
+      const start = withinYear[0].value;
+      const end = withinYear[withinYear.length - 1].value;
+      if (start > 0 && end > 0) {
+        result['aar' + year] = ((end / start) - 1) * 100;
+      }
+    }
+  });
+  const threeYearBack = new Date(latest.date);
+  threeYearBack.setFullYear(threeYearBack.getFullYear() - 3);
+  const start3y = nearestPointOnOrBefore(sorted, threeYearBack) || sorted[0];
+  if (start3y && start3y.value > 0 && latest.value > 0) {
+    const days = Math.max(1, (latest.date - start3y.date) / (1000 * 60 * 60 * 24));
+    const years = days / 365.25;
+    if (years >= 1) {
+      result.aarlig3ar = (Math.pow(latest.value / start3y.value, 1 / years) - 1) * 100;
+    }
+  }
+  const monthlyReturns = [];
+  const lookback = new Date(latest.date);
+  lookback.setFullYear(lookback.getFullYear() - 3);
+  const recentPoints = sorted.filter((p) => p.date >= lookback);
+  for (let i = 1; i < recentPoints.length; i++) {
+    const prev = recentPoints[i - 1].value;
+    const curr = recentPoints[i].value;
+    if (prev > 0 && curr > 0) {
+      monthlyReturns.push((curr / prev) - 1);
+    }
+  }
+  if (monthlyReturns.length >= 6) {
+    const mean = monthlyReturns.reduce((sum, v) => sum + v, 0) / monthlyReturns.length;
+    const variance = monthlyReturns.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / monthlyReturns.length;
+    result.risiko3ar = Math.sqrt(variance) * Math.sqrt(12) * 100;
+  }
+  return result;
+};
+const findProductByName = (products, incomingName) => {
+  const target = normalizeText(incomingName);
+  if (!target) return null;
+  let match = products.find((p) => normalizeText(p.navn) === target);
+  if (match) return match;
+  match = products.find((p) => normalizeText(p.navn).includes(target) || target.includes(normalizeText(p.navn)));
+  return match || null;
+};
 const DEFAULT_LIKVID = 8000000;  // 3 mill aksjefond + 1 mill aksjer + 2 mill renter + 2 mill kontanter
 const DEFAULT_PE = 1000000;
 const DEFAULT_EIENDOM = 1000000;
@@ -105,29 +217,16 @@ export default function PensumPrognoseModell() {
   const [aktivKundeId, setAktivKundeId] = useState(null);
   const [visKundeliste, setVisKundeliste] = useState(false);
   const [lagringsStatus, setLagringsStatus] = useState('');
+  const [visAdminPanel, setVisAdminPanel] = useState(false);
+  const [adminUnlockValue, setAdminUnlockValue] = useState('');
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [adminStatus, setAdminStatus] = useState('');
+
 
   // Pensum Løsninger - fond og mandater med historisk avkastning
   // aktivatype: 'aksje', 'rente' eller 'alternativ'
   // likviditet: 'likvid' eller 'illikvid'
-  const [pensumProdukter] = useState({
-    enkeltfond: [
-      { id: 'norge-a', navn: 'Pensum Norge A', aktivatype: 'aksje', likviditet: 'likvid', aar2024: 21.5, aar2023: 17.7, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
-      { id: 'energy-a', navn: 'Pensum Global Energy A', aktivatype: 'aksje', likviditet: 'likvid', aar2024: 7.3, aar2023: -1.1, aar2022: 11.0, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
-      { id: 'banking-d', navn: 'Pensum Nordic Banking Sector D', aktivatype: 'aksje', likviditet: 'likvid', aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
-      { id: 'financial-d', navn: 'Pensum Financial Opportunity Fund D', aktivatype: 'rente', likviditet: 'likvid', aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null }
-    ],
-    fondsportefoljer: [
-      { id: 'globale-aksjer', navn: 'Pensum Globale Aksjer', aktivatype: 'aksje', likviditet: 'likvid', aar2024: 18.3, aar2023: 17.5, aar2022: -3.7, aar2021: 16.3, aar2020: 14.8, aarlig3ar: 13.6, risiko3ar: 10.7 },
-      { id: 'basis', navn: 'Pensum Basis', aktivatype: 'blandet', likviditet: 'likvid', aar2024: 6.2, aar2023: 13.1, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
-      { id: 'global-hoyrente', navn: 'Pensum Global Høyrente', aktivatype: 'rente', likviditet: 'likvid', aar2024: 6.5, aar2023: 7.9, aar2022: -5.1, aar2021: 5.3, aar2020: 3.0, aarlig3ar: 6.9, risiko3ar: 2.3 },
-      { id: 'nordisk-hoyrente', navn: 'Pensum Nordisk Høyrente', aktivatype: 'rente', likviditet: 'likvid', aar2024: 6.5, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null }
-    ],
-    alternative: [
-      { id: 'turnstone-pe', navn: 'Turnstone Private Equity', aktivatype: 'alternativ', likviditet: 'illikvid', forventetAvkastning: 12.0, aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: 12.0, risiko3ar: null },
-      { id: 'amaron-re', navn: 'Amaron Real Estate', aktivatype: 'alternativ', likviditet: 'illikvid', forventetAvkastning: 12.0, aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: 12.0, risiko3ar: null },
-      { id: 'unoterte-aksjer', navn: 'Unoterte aksjer', aktivatype: 'alternativ', likviditet: 'illikvid', forventetAvkastning: 12.0, aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: 12.0, risiko3ar: null }
-    ]
-  });
+  const [pensumProdukter, setPensumProdukter] = useState(() => deepClone(DEFAULT_PENSUM_PRODUKTER));
 
   // Innstillinger for Pensum Løsninger
   const [visAlternative, setVisAlternative] = useState(false);
@@ -315,13 +414,6 @@ export default function PensumPrognoseModell() {
     return totalVekt > 0 ? vektetSum / totalVekt : 0;
   }, [pensumAllokering, pensumProdukter]);
 
-  const likvideTotal = aksjerKunde + aksjefondKunde + renterKunde + kontanterKunde;
-  const peTotal = peFondKunde + unoterteAksjerKunde + shippingKunde;
-  const eiendomTotal = egenEiendomKunde + eiendomSyndikatKunde + eiendomFondKunde;
-  const illikvideTotal = peTotal + eiendomTotal;
-  const totalKapital = likvideTotal + illikvideTotal;
-  const nettoKontantstrom = innskudd - uttak;
-
   // Beregn prognose for Pensum-portefølje
   const pensumPrognose = useMemo(() => {
     const avkastning = pensumForventetAvkastning / 100;
@@ -343,25 +435,25 @@ export default function PensumPrognoseModell() {
 
   // Last lagrede kunder ved oppstart
   useEffect(() => {
-    const lastKunder = () => {
-      if (!radgiver) {
-        setLagredeKunder([]);
-        return;
-      }
-
-      const storageKey = 'pensum_kunder_' + radgiver.toLowerCase().replace(/\s+/g, '_');
-
-      try {
-        if (typeof window !== 'undefined') {
-          const raw = localStorage.getItem(storageKey);
-          setLagredeKunder(raw ? JSON.parse(raw) : []);
+    const lastKunder = async () => {
+      if (radgiver) {
+        const storageKey = 'pensum_kunder_' + radgiver.toLowerCase().replace(/\s+/g, '_');
+        try {
+          // Prøv window.storage først (Claude's persistent storage)
+          if (window.storage && window.storage.get) {
+            const result = await window.storage.get(storageKey);
+            if (result && result.value) {
+              setLagredeKunder(JSON.parse(result.value));
+              return;
+            }
+          }
+        } catch (e) {
+          console.log('Storage not available:', e);
         }
-      } catch (e) {
-        console.log('LocalStorage not available:', e);
+        // Fallback: ingen lagrede kunder
         setLagredeKunder([]);
       }
     };
-
     lastKunder();
   }, [radgiver]);
 
@@ -409,7 +501,7 @@ export default function PensumPrognoseModell() {
   }, []);
 
   // Lagre kunde
-  const lagreKunde = useCallback(() => {
+  const lagreKunde = useCallback(async () => {
     if (!radgiver) {
       alert('Vennligst fyll inn rådgivernavn først');
       return;
@@ -418,49 +510,50 @@ export default function PensumPrognoseModell() {
       alert('Vennligst fyll inn kundenavn først');
       return;
     }
-
     const storageKey = 'pensum_kunder_' + radgiver.toLowerCase().replace(/\s+/g, '_');
     const kundeData = getKundeData();
-
+    
     let oppdatertListe;
     const eksisterendeIndex = lagredeKunder.findIndex(k => k.id === kundeData.id);
-
     if (eksisterendeIndex >= 0) {
       oppdatertListe = [...lagredeKunder];
       oppdatertListe[eksisterendeIndex] = kundeData;
     } else {
       oppdatertListe = [...lagredeKunder, kundeData];
     }
-
+    
     try {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(storageKey, JSON.stringify(oppdatertListe));
+      if (window.storage && window.storage.set) {
+        await window.storage.set(storageKey, JSON.stringify(oppdatertListe));
+        setLagredeKunder(oppdatertListe);
+        setAktivKundeId(kundeData.id);
+        setLagringsStatus('Lagret!');
+        setTimeout(() => setLagringsStatus(''), 2000);
+      } else {
+        throw new Error('Storage not available');
       }
+    } catch (e) {
+      // Fallback: tilby nedlasting av fil
       setLagredeKunder(oppdatertListe);
       setAktivKundeId(kundeData.id);
-      setLagringsStatus('Lagret!');
-      setTimeout(() => setLagringsStatus(''), 2000);
-    } catch (e) {
-      console.log('Could not save to localStorage:', e);
-      alert('Kunne ikke lagre lokalt i nettleseren.');
+      alert('Automatisk lagring er ikke tilgjengelig i denne nettleseren. Bruk "Eksporter" for å lagre kunden som fil.');
     }
   }, [radgiver, kundeNavn, getKundeData, lagredeKunder]);
 
   // Slett kunde
-  const slettKunde = useCallback((id) => {
+  const slettKunde = useCallback(async (id) => {
     if (!confirm('Er du sikker på at du vil slette denne kunden?')) return;
-
     const storageKey = 'pensum_kunder_' + radgiver.toLowerCase().replace(/\s+/g, '_');
     const oppdatertListe = lagredeKunder.filter(k => k.id !== id);
-
+    
     try {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(storageKey, JSON.stringify(oppdatertListe));
+      if (window.storage && window.storage.set) {
+        await window.storage.set(storageKey, JSON.stringify(oppdatertListe));
       }
     } catch (e) {
-      console.log('Could not save to localStorage:', e);
+      console.log('Could not save to storage:', e);
     }
-
+    
     setLagredeKunder(oppdatertListe);
     if (aktivKundeId === id) setAktivKundeId(null);
   }, [radgiver, lagredeKunder, aktivKundeId]);
@@ -521,7 +614,169 @@ export default function PensumPrognoseModell() {
     e.target.value = '';
   }, [lastKundeData]);
 
-  
+  const likvideTotal = aksjerKunde + aksjefondKunde + renterKunde + kontanterKunde;
+  const peTotal = peFondKunde + unoterteAksjerKunde + shippingKunde;
+  const eiendomTotal = egenEiendomKunde + eiendomSyndikatKunde + eiendomFondKunde;
+  const illikvideTotal = peTotal + eiendomTotal;
+  const totalKapital = likvideTotal + illikvideTotal;
+  const nettoKontantstrom = innskudd - uttak;
+
+
+  useEffect(() => {
+    try {
+      if (typeof window === 'undefined') return;
+      const stored = localStorage.getItem(PENSUM_PRODUCT_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && parsed.enkeltfond && parsed.fondsportefoljer && parsed.alternative) {
+          setPensumProdukter(parsed);
+        }
+      }
+    } catch (e) {
+      console.log('Kunne ikke lese admin-data:', e);
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      if (typeof window === 'undefined') return;
+      localStorage.setItem(PENSUM_PRODUCT_STORAGE_KEY, JSON.stringify(pensumProdukter));
+    } catch (e) {
+      console.log('Kunne ikke lagre admin-data:', e);
+    }
+  }, [pensumProdukter]);
+
+  const unlockAdmin = useCallback(() => {
+    if (adminUnlockValue === ADMIN_PASSCODE) {
+      setAdminUnlocked(true);
+      setAdminStatus('Adminmodus aktivert');
+      setAdminUnlockValue('');
+    } else {
+      setAdminStatus('Feil passord');
+    }
+    setTimeout(() => setAdminStatus(''), 2500);
+  }, [adminUnlockValue]);
+
+  const lockAdmin = useCallback(() => {
+    setAdminUnlocked(false);
+    setVisAdminPanel(false);
+    setAdminUnlockValue('');
+    setAdminStatus('');
+  }, []);
+
+  const updatePensumProduktField = useCallback((kategori, id, field, value) => {
+    setPensumProdukter(prev => ({
+      ...prev,
+      [kategori]: prev[kategori].map(item => item.id === id ? {
+        ...item,
+        [field]: ['forventetAvkastning', 'aarlig3ar', 'risiko3ar', 'aar2024', 'aar2023', 'aar2022', 'aar2021', 'aar2020'].includes(field)
+          ? toNumeric(value)
+          : value
+      } : item)
+    }));
+  }, []);
+
+  const resetPensumProdukterTilDefault = useCallback(() => {
+    if (!confirm('Tilbakestille alle Pensum-produkter til standardverdier?')) return;
+    setPensumProdukter(deepClone(DEFAULT_PENSUM_PRODUKTER));
+    setAdminStatus('Standardverdier gjenopprettet');
+    setTimeout(() => setAdminStatus(''), 2500);
+  }, []);
+
+  const eksportPensumProdukter = useCallback(() => {
+    const blob = new Blob([JSON.stringify(pensumProdukter, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'pensum-produkter-admin.json';
+    link.click();
+    URL.revokeObjectURL(url);
+  }, [pensumProdukter]);
+
+  const importerPensumProdukterJson = useCallback((e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const parsed = JSON.parse(event.target.result);
+        if (!parsed?.enkeltfond || !parsed?.fondsportefoljer || !parsed?.alternative) throw new Error('Ugyldig fil');
+        setPensumProdukter(parsed);
+        setAdminStatus('Produktoppsett importert');
+      } catch (err) {
+        setAdminStatus('Kunne ikke lese JSON-fil');
+      }
+      setTimeout(() => setAdminStatus(''), 2500);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
+  }, []);
+
+  const importerPensumExcel = useCallback(async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const buffer = await file.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
+      const preferredSheet = workbook.SheetNames.find(name => normalizeText(name).includes('pensum')) || workbook.SheetNames[0];
+      const sheet = workbook.Sheets[preferredSheet];
+      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
+
+      if (!rows[3]) throw new Error('Fant ikke forventet header-rad i Excel-filen.');
+      const headers = rows[3];
+      const seriesDefs = [];
+      for (let col = 1; col < headers.length; col++) {
+        const productName = headers[col];
+        if (productName && productName.toString().trim()) {
+          seriesDefs.push({ navn: productName.toString().trim(), dateCol: col, valueCol: col + 1 });
+          col += 1;
+        }
+      }
+      if (!seriesDefs.length) throw new Error('Fant ingen produktkolonner i rad 4.');
+
+      const updated = deepClone(pensumProdukter);
+      const flatUpdated = [...updated.enkeltfond, ...updated.fondsportefoljer, ...updated.alternative];
+      let count = 0;
+
+      seriesDefs.forEach((series) => {
+        const points = [];
+        for (let rowIndex = 6; rowIndex < rows.length; rowIndex++) {
+          const row = rows[rowIndex] || [];
+          const dt = toDateValue(row[series.dateCol]);
+          const val = toNumeric(row[series.valueCol]);
+          if (!dt || val === null) continue;
+          points.push({ date: dt, value: val });
+        }
+        if (points.length < 2) return;
+
+        const metrics = calculateFeedMetrics(points);
+        const product = findProductByName(flatUpdated, series.navn);
+        if (!product || !metrics) return;
+
+        product.aar2024 = metrics.aar2024;
+        product.aar2023 = metrics.aar2023;
+        product.aar2022 = metrics.aar2022;
+        product.aar2021 = metrics.aar2021;
+        product.aar2020 = metrics.aar2020;
+        product.aarlig3ar = metrics.aarlig3ar;
+        product.risiko3ar = metrics.risiko3ar;
+        product.sistOppdatert = metrics.sistOppdatert;
+        if (product.likviditet === 'likvid' && metrics.aarlig3ar !== null) {
+          product.forventetAvkastning = metrics.aarlig3ar;
+        }
+        count += 1;
+      });
+
+      setPensumProdukter(updated);
+      setAdminStatus('Oppdatert ' + count + ' produkter fra ' + file.name);
+    } catch (err) {
+      console.log(err);
+      setAdminStatus('Excel-import feilet: ' + (err?.message || 'ukjent feil'));
+    }
+    setTimeout(() => setAdminStatus(''), 4000);
+    e.target.value = '';
+  }, [pensumProdukter]);
+
   const oppdaterSammenligningProfil = useCallback((nyProfil) => {
     setSammenligningProfil(nyProfil);
     setSammenligningAllokering(beregnAllokering(likvideTotal, peTotal, eiendomTotal, nyProfil));
@@ -934,11 +1189,7 @@ export default function PensumPrognoseModell() {
         </td>
         <td className="py-3 px-2">
           <div className="flex items-center justify-center">
-            <input type="text" value={localBelop} onChange={(e) => setLocalBelop(e.target.value)} onBlur={() => {
-              const v = parseInt(localBelop.replace(/[^0-9]/g, ''), 10) || 0;
-              const nyVekt = totalKapital > 0 ? parseFloat(((v / totalKapital) * 100).toFixed(1)) : 0;
-              updateAllokeringVekt(index, nyVekt);
-            }} className="w-28 text-center text-sm border border-gray-200 rounded py-1.5 px-2" />
+            <input type="text" value={localBelop} onChange={(e) => setLocalBelop(e.target.value)} onBlur={() => { const v = parseInt(localBelop.replace(/[^0-9]/g,''),10)||0; updateAllokeringVekt(index, parseFloat((v/totalKapital*100).toFixed(1))); }} className="w-28 text-center text-sm border border-gray-200 rounded py-1.5 px-2" />
             <span className="ml-1 text-gray-400 text-xs">kr</span>
           </div>
         </td>
@@ -1502,6 +1753,116 @@ export default function PensumPrognoseModell() {
 
         {activeTab === 'losninger' && (
           <div className="space-y-6 no-print">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-3" style={{ backgroundColor: PENSUM_COLORS.darkBlue }}>
+                <div>
+                  <h3 className="text-lg font-semibold text-white">Admin</h3>
+                  <p className="text-xs text-blue-200">Kun UI-lås i nettleseren. Ikke ekte tilgangskontroll.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setVisAdminPanel(v => !v)} className="px-4 py-2 rounded-lg text-sm font-medium bg-white" style={{ color: PENSUM_COLORS.darkBlue }}>
+                    {visAdminPanel ? 'Skjul admin' : 'Vis admin'}
+                  </button>
+                  {adminUnlocked && (
+                    <button onClick={lockAdmin} className="px-4 py-2 rounded-lg text-sm font-medium border border-blue-300 text-white hover:bg-blue-800">
+                      Lås
+                    </button>
+                  )}
+                </div>
+              </div>
+              {visAdminPanel && (
+                <div className="p-6">
+                  {!adminUnlocked ? (
+                    <div className="max-w-md">
+                      <label className="block text-sm font-medium mb-2" style={{ color: PENSUM_COLORS.darkBlue }}>Admin-passord</label>
+                      <div className="flex gap-2">
+                        <input type="password" value={adminUnlockValue} onChange={(e) => setAdminUnlockValue(e.target.value)} className="flex-1 border border-gray-200 rounded-lg py-2.5 px-4" placeholder="Skriv inn passord" />
+                        <button onClick={unlockAdmin} className="px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: PENSUM_COLORS.darkBlue }}>Lås opp</button>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">Bytt gjerne ADMIN_PASSCODE direkte i koden.</p>
+                      {adminStatus && <p className="text-sm mt-3" style={{ color: adminStatus.includes('Feil') ? PENSUM_COLORS.red : PENSUM_COLORS.green }}>{adminStatus}</p>}
+                    </div>
+                  ) : (
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                        <div className="border border-gray-200 rounded-xl p-4">
+                          <h4 className="font-semibold mb-2" style={{ color: PENSUM_COLORS.darkBlue }}>Månedlig Excel-import</h4>
+                          <p className="text-xs text-gray-500 mb-3">Last opp Excel-fil i samme format som datafeeden. Match skjer på produktnavn.</p>
+                          <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white cursor-pointer" style={{ backgroundColor: PENSUM_COLORS.darkBlue }}>
+                            Last opp Excel
+                            <input type="file" accept=".xlsx,.xls" onChange={importerPensumExcel} className="hidden" />
+                          </label>
+                        </div>
+                        <div className="border border-gray-200 rounded-xl p-4">
+                          <h4 className="font-semibold mb-2" style={{ color: PENSUM_COLORS.darkBlue }}>Produktoppsett</h4>
+                          <div className="flex flex-wrap gap-2">
+                            <button onClick={eksportPensumProdukter} className="px-3 py-2 rounded-lg text-sm border border-gray-200 hover:bg-gray-50" style={{ color: PENSUM_COLORS.darkBlue }}>Eksporter JSON</button>
+                            <label className="px-3 py-2 rounded-lg text-sm border border-gray-200 hover:bg-gray-50 cursor-pointer" style={{ color: PENSUM_COLORS.darkBlue }}>
+                              Importer JSON
+                              <input type="file" accept=".json" onChange={importerPensumProdukterJson} className="hidden" />
+                            </label>
+                          </div>
+                        </div>
+                        <div className="border border-gray-200 rounded-xl p-4">
+                          <h4 className="font-semibold mb-2" style={{ color: PENSUM_COLORS.darkBlue }}>Tilbakestill</h4>
+                          <button onClick={resetPensumProdukterTilDefault} className="px-3 py-2 rounded-lg text-sm border border-red-200 text-red-600 hover:bg-red-50">Gjenopprett standard</button>
+                        </div>
+                      </div>
+
+                      {adminStatus && (
+                        <div className="px-4 py-3 rounded-lg text-sm font-medium" style={{ backgroundColor: '#F0FDF4', color: PENSUM_COLORS.green }}>
+                          {adminStatus}
+                        </div>
+                      )}
+
+                      <div className="border border-gray-200 rounded-xl overflow-hidden">
+                        <div className="px-4 py-3" style={{ backgroundColor: PENSUM_COLORS.lightGray }}>
+                          <h4 className="font-semibold" style={{ color: PENSUM_COLORS.darkBlue }}>Manuell vedlikehold av produkter</h4>
+                        </div>
+                        <div className="p-4 overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr style={{ backgroundColor: PENSUM_COLORS.darkBlue }}>
+                                <th className="py-2 px-3 text-left text-white">Navn</th>
+                                <th className="py-2 px-3 text-left text-white">Kategori</th>
+                                <th className="py-2 px-3 text-right text-white">Forv. avk</th>
+                                <th className="py-2 px-3 text-right text-white">Årlig 3 år</th>
+                                <th className="py-2 px-3 text-right text-white">Risiko 3 år</th>
+                                <th className="py-2 px-3 text-left text-white">Sist oppdatert</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {[
+                                ...pensumProdukter.enkeltfond.map((item) => ({ ...item, adminKategori: 'enkeltfond' })),
+                                ...pensumProdukter.fondsportefoljer.map((item) => ({ ...item, adminKategori: 'fondsportefoljer' })),
+                                ...pensumProdukter.alternative.map((item) => ({ ...item, adminKategori: 'alternative' }))
+                              ].map((item, idx) => (
+                                <tr key={item.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                  <td className="py-2 px-3">
+                                    <input type="text" value={item.navn} onChange={(e) => updatePensumProduktField(item.adminKategori, item.id, 'navn', e.target.value)} className="w-full border border-gray-200 rounded py-1.5 px-2" />
+                                  </td>
+                                  <td className="py-2 px-3 text-gray-600">{item.adminKategori}</td>
+                                  <td className="py-2 px-3">
+                                    <input type="number" step="0.1" value={item.forventetAvkastning ?? ''} onChange={(e) => updatePensumProduktField(item.adminKategori, item.id, 'forventetAvkastning', e.target.value)} className="w-24 ml-auto block border border-gray-200 rounded py-1.5 px-2 text-right" />
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <input type="number" step="0.1" value={item.aarlig3ar ?? ''} onChange={(e) => updatePensumProduktField(item.adminKategori, item.id, 'aarlig3ar', e.target.value)} className="w-24 ml-auto block border border-gray-200 rounded py-1.5 px-2 text-right" />
+                                  </td>
+                                  <td className="py-2 px-3">
+                                    <input type="number" step="0.1" value={item.risiko3ar ?? ''} onChange={(e) => updatePensumProduktField(item.adminKategori, item.id, 'risiko3ar', e.target.value)} className="w-24 ml-auto block border border-gray-200 rounded py-1.5 px-2 text-right" />
+                                  </td>
+                                  <td className="py-2 px-3 text-gray-500">{item.sistOppdatert || '—'}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
             {/* Header med standardporteføljer og innstillinger */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="px-6 py-4" style={{ backgroundColor: PENSUM_COLORS.darkBlue }}>
