@@ -55,117 +55,6 @@ function beregnAllokering(likvid, pe, eiendom, profilNavn) {
   ];
 }
 
-
-
-const DEFAULT_PENSUM_PRODUKTER = {
-    enkeltfond: [
-      { id: 'norge-a', navn: 'Pensum Norge A', aktivatype: 'aksje', likviditet: 'likvid', aar2024: 21.5, aar2023: 17.7, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
-      { id: 'energy-a', navn: 'Pensum Global Energy A', aktivatype: 'aksje', likviditet: 'likvid', aar2024: 7.3, aar2023: -1.1, aar2022: 11.0, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
-      { id: 'banking-d', navn: 'Pensum Nordic Banking Sector D', aktivatype: 'aksje', likviditet: 'likvid', aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
-      { id: 'financial-d', navn: 'Pensum Financial Opportunity Fund D', aktivatype: 'rente', likviditet: 'likvid', aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null }
-    ],
-    fondsportefoljer: [
-      { id: 'globale-aksjer', navn: 'Pensum Globale Aksjer', aktivatype: 'aksje', likviditet: 'likvid', aar2024: 18.3, aar2023: 17.5, aar2022: -3.7, aar2021: 16.3, aar2020: 14.8, aarlig3ar: 13.6, risiko3ar: 10.7 },
-      { id: 'basis', navn: 'Pensum Basis', aktivatype: 'blandet', likviditet: 'likvid', aar2024: 6.2, aar2023: 13.1, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
-      { id: 'global-hoyrente', navn: 'Pensum Global Høyrente', aktivatype: 'rente', likviditet: 'likvid', aar2024: 6.5, aar2023: 7.9, aar2022: -5.1, aar2021: 5.3, aar2020: 3.0, aarlig3ar: 6.9, risiko3ar: 2.3 },
-      { id: 'nordisk-hoyrente', navn: 'Pensum Nordisk Høyrente', aktivatype: 'rente', likviditet: 'likvid', aar2024: 6.5, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null }
-    ],
-    alternative: [
-      { id: 'turnstone-pe', navn: 'Turnstone Private Equity', aktivatype: 'alternativ', likviditet: 'illikvid', forventetAvkastning: 12.0, aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: 12.0, risiko3ar: null },
-      { id: 'amaron-re', navn: 'Amaron Real Estate', aktivatype: 'alternativ', likviditet: 'illikvid', forventetAvkastning: 12.0, aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: 12.0, risiko3ar: null },
-      { id: 'unoterte-aksjer', navn: 'Unoterte aksjer', aktivatype: 'alternativ', likviditet: 'illikvid', forventetAvkastning: 12.0, aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: 12.0, risiko3ar: null }
-    ]
-  };
-const PENSUM_PRODUCT_STORAGE_KEY = 'pensum_admin_produkter_v1';
-const ADMIN_PASSCODE = 'Pensum2026!';
-
-const deepClone = (value) => JSON.parse(JSON.stringify(value));
-const normalizeText = (value) => (value || '').toString().toLowerCase().replace(/\s+/g, ' ').trim();
-const toNumeric = (value) => {
-  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
-  if (value === null || value === undefined || value === '') return null;
-  const cleaned = value.toString().replace(/\s/g, '').replace('%','').replace(',', '.');
-  const num = parseFloat(cleaned);
-  return Number.isFinite(num) ? num : null;
-};
-const toDateValue = (raw) => {
-  if (!raw && raw !== 0) return null;
-  if (raw instanceof Date && !Number.isNaN(raw.getTime())) return raw;
-  if (typeof raw === 'number') {
-    const parsed = XLSX.SSF.parse_date_code(raw);
-    if (parsed) return new Date(parsed.y, parsed.m - 1, parsed.d);
-  }
-  const dt = new Date(raw);
-  return Number.isNaN(dt.getTime()) ? null : dt;
-};
-const nearestPointOnOrBefore = (points, targetDate) => {
-  let candidate = null;
-  for (const point of points) {
-    if (point.date <= targetDate) candidate = point;
-    else break;
-  }
-  return candidate;
-};
-const calculateFeedMetrics = (points) => {
-  if (!points || points.length < 2) return null;
-  const sorted = [...points].sort((a, b) => a.date - b.date);
-  const latest = sorted[sorted.length - 1];
-  const result = {
-    aar2024: null,
-    aar2023: null,
-    aar2022: null,
-    aar2021: null,
-    aar2020: null,
-    aarlig3ar: null,
-    risiko3ar: null,
-    sistOppdatert: latest?.date ? latest.date.toISOString().split('T')[0] : null
-  };
-  [2024, 2023, 2022, 2021, 2020].forEach((year) => {
-    const withinYear = sorted.filter((p) => p.date.getFullYear() === year);
-    if (withinYear.length >= 2) {
-      const start = withinYear[0].value;
-      const end = withinYear[withinYear.length - 1].value;
-      if (start > 0 && end > 0) {
-        result['aar' + year] = ((end / start) - 1) * 100;
-      }
-    }
-  });
-  const threeYearBack = new Date(latest.date);
-  threeYearBack.setFullYear(threeYearBack.getFullYear() - 3);
-  const start3y = nearestPointOnOrBefore(sorted, threeYearBack) || sorted[0];
-  if (start3y && start3y.value > 0 && latest.value > 0) {
-    const days = Math.max(1, (latest.date - start3y.date) / (1000 * 60 * 60 * 24));
-    const years = days / 365.25;
-    if (years >= 1) {
-      result.aarlig3ar = (Math.pow(latest.value / start3y.value, 1 / years) - 1) * 100;
-    }
-  }
-  const monthlyReturns = [];
-  const lookback = new Date(latest.date);
-  lookback.setFullYear(lookback.getFullYear() - 3);
-  const recentPoints = sorted.filter((p) => p.date >= lookback);
-  for (let i = 1; i < recentPoints.length; i++) {
-    const prev = recentPoints[i - 1].value;
-    const curr = recentPoints[i].value;
-    if (prev > 0 && curr > 0) {
-      monthlyReturns.push((curr / prev) - 1);
-    }
-  }
-  if (monthlyReturns.length >= 6) {
-    const mean = monthlyReturns.reduce((sum, v) => sum + v, 0) / monthlyReturns.length;
-    const variance = monthlyReturns.reduce((sum, v) => sum + Math.pow(v - mean, 2), 0) / monthlyReturns.length;
-    result.risiko3ar = Math.sqrt(variance) * Math.sqrt(12) * 100;
-  }
-  return result;
-};
-const findProductByName = (products, incomingName) => {
-  const target = normalizeText(incomingName);
-  if (!target) return null;
-  let match = products.find((p) => normalizeText(p.navn) === target);
-  if (match) return match;
-  match = products.find((p) => normalizeText(p.navn).includes(target) || target.includes(normalizeText(p.navn)));
-  return match || null;
-};
 const DEFAULT_LIKVID = 8000000;  // 3 mill aksjefond + 1 mill aksjer + 2 mill renter + 2 mill kontanter
 const DEFAULT_PE = 1000000;
 const DEFAULT_EIENDOM = 1000000;
@@ -216,16 +105,29 @@ export default function PensumPrognoseModell() {
   const [aktivKundeId, setAktivKundeId] = useState(null);
   const [visKundeliste, setVisKundeliste] = useState(false);
   const [lagringsStatus, setLagringsStatus] = useState('');
-  const [visAdminPanel, setVisAdminPanel] = useState(false);
-  const [adminUnlockValue, setAdminUnlockValue] = useState('');
-  const [adminUnlocked, setAdminUnlocked] = useState(false);
-  const [adminStatus, setAdminStatus] = useState('');
-
 
   // Pensum Løsninger - fond og mandater med historisk avkastning
   // aktivatype: 'aksje', 'rente' eller 'alternativ'
   // likviditet: 'likvid' eller 'illikvid'
-  const [pensumProdukter, setPensumProdukter] = useState(() => deepClone(DEFAULT_PENSUM_PRODUKTER));
+  const [pensumProdukter] = useState({
+    enkeltfond: [
+      { id: 'norge-a', navn: 'Pensum Norge A', aktivatype: 'aksje', likviditet: 'likvid', aar2024: 21.5, aar2023: 17.7, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
+      { id: 'energy-a', navn: 'Pensum Global Energy A', aktivatype: 'aksje', likviditet: 'likvid', aar2024: 7.3, aar2023: -1.1, aar2022: 11.0, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
+      { id: 'banking-d', navn: 'Pensum Nordic Banking Sector D', aktivatype: 'aksje', likviditet: 'likvid', aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
+      { id: 'financial-d', navn: 'Pensum Financial Opportunity Fund D', aktivatype: 'rente', likviditet: 'likvid', aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null }
+    ],
+    fondsportefoljer: [
+      { id: 'globale-aksjer', navn: 'Pensum Globale Aksjer', aktivatype: 'aksje', likviditet: 'likvid', aar2024: 18.3, aar2023: 17.5, aar2022: -3.7, aar2021: 16.3, aar2020: 14.8, aarlig3ar: 13.6, risiko3ar: 10.7 },
+      { id: 'basis', navn: 'Pensum Basis', aktivatype: 'blandet', likviditet: 'likvid', aar2024: 6.2, aar2023: 13.1, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
+      { id: 'global-hoyrente', navn: 'Pensum Global Høyrente', aktivatype: 'rente', likviditet: 'likvid', aar2024: 6.5, aar2023: 7.9, aar2022: -5.1, aar2021: 5.3, aar2020: 3.0, aarlig3ar: 6.9, risiko3ar: 2.3 },
+      { id: 'nordisk-hoyrente', navn: 'Pensum Nordisk Høyrente', aktivatype: 'rente', likviditet: 'likvid', aar2024: 6.5, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null }
+    ],
+    alternative: [
+      { id: 'turnstone-pe', navn: 'Turnstone Private Equity', aktivatype: 'alternativ', likviditet: 'illikvid', forventetAvkastning: 12.0, aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: 12.0, risiko3ar: null },
+      { id: 'amaron-re', navn: 'Amaron Real Estate', aktivatype: 'alternativ', likviditet: 'illikvid', forventetAvkastning: 12.0, aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: 12.0, risiko3ar: null },
+      { id: 'unoterte-aksjer', navn: 'Unoterte aksjer', aktivatype: 'alternativ', likviditet: 'illikvid', forventetAvkastning: 12.0, aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: 12.0, risiko3ar: null }
+    ]
+  });
 
   // Innstillinger for Pensum Løsninger
   const [visAlternative, setVisAlternative] = useState(false);
@@ -441,25 +343,25 @@ export default function PensumPrognoseModell() {
 
   // Last lagrede kunder ved oppstart
   useEffect(() => {
-    const lastKunder = async () => {
-      if (radgiver) {
-        const storageKey = 'pensum_kunder_' + radgiver.toLowerCase().replace(/\s+/g, '_');
-        try {
-          // Prøv window.storage først (Claude's persistent storage)
-          if (window.storage && window.storage.get) {
-            const result = await window.storage.get(storageKey);
-            if (result && result.value) {
-              setLagredeKunder(JSON.parse(result.value));
-              return;
-            }
-          }
-        } catch (e) {
-          console.log('Storage not available:', e);
+    const lastKunder = () => {
+      if (!radgiver) {
+        setLagredeKunder([]);
+        return;
+      }
+
+      const storageKey = 'pensum_kunder_' + radgiver.toLowerCase().replace(/\s+/g, '_');
+
+      try {
+        if (typeof window !== 'undefined') {
+          const raw = localStorage.getItem(storageKey);
+          setLagredeKunder(raw ? JSON.parse(raw) : []);
         }
-        // Fallback: ingen lagrede kunder
+      } catch (e) {
+        console.log('LocalStorage not available:', e);
         setLagredeKunder([]);
       }
     };
+
     lastKunder();
   }, [radgiver]);
 
@@ -507,7 +409,7 @@ export default function PensumPrognoseModell() {
   }, []);
 
   // Lagre kunde
-  const lagreKunde = useCallback(async () => {
+  const lagreKunde = useCallback(() => {
     if (!radgiver) {
       alert('Vennligst fyll inn rådgivernavn først');
       return;
@@ -516,50 +418,49 @@ export default function PensumPrognoseModell() {
       alert('Vennligst fyll inn kundenavn først');
       return;
     }
+
     const storageKey = 'pensum_kunder_' + radgiver.toLowerCase().replace(/\s+/g, '_');
     const kundeData = getKundeData();
-    
+
     let oppdatertListe;
     const eksisterendeIndex = lagredeKunder.findIndex(k => k.id === kundeData.id);
+
     if (eksisterendeIndex >= 0) {
       oppdatertListe = [...lagredeKunder];
       oppdatertListe[eksisterendeIndex] = kundeData;
     } else {
       oppdatertListe = [...lagredeKunder, kundeData];
     }
-    
+
     try {
-      if (window.storage && window.storage.set) {
-        await window.storage.set(storageKey, JSON.stringify(oppdatertListe));
-        setLagredeKunder(oppdatertListe);
-        setAktivKundeId(kundeData.id);
-        setLagringsStatus('Lagret!');
-        setTimeout(() => setLagringsStatus(''), 2000);
-      } else {
-        throw new Error('Storage not available');
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(storageKey, JSON.stringify(oppdatertListe));
       }
-    } catch (e) {
-      // Fallback: tilby nedlasting av fil
       setLagredeKunder(oppdatertListe);
       setAktivKundeId(kundeData.id);
-      alert('Automatisk lagring er ikke tilgjengelig i denne nettleseren. Bruk "Eksporter" for å lagre kunden som fil.');
+      setLagringsStatus('Lagret!');
+      setTimeout(() => setLagringsStatus(''), 2000);
+    } catch (e) {
+      console.log('Could not save to localStorage:', e);
+      alert('Kunne ikke lagre lokalt i nettleseren.');
     }
   }, [radgiver, kundeNavn, getKundeData, lagredeKunder]);
 
   // Slett kunde
-  const slettKunde = useCallback(async (id) => {
+  const slettKunde = useCallback((id) => {
     if (!confirm('Er du sikker på at du vil slette denne kunden?')) return;
+
     const storageKey = 'pensum_kunder_' + radgiver.toLowerCase().replace(/\s+/g, '_');
     const oppdatertListe = lagredeKunder.filter(k => k.id !== id);
-    
+
     try {
-      if (window.storage && window.storage.set) {
-        await window.storage.set(storageKey, JSON.stringify(oppdatertListe));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(storageKey, JSON.stringify(oppdatertListe));
       }
     } catch (e) {
-      console.log('Could not save to storage:', e);
+      console.log('Could not save to localStorage:', e);
     }
-    
+
     setLagredeKunder(oppdatertListe);
     if (aktivKundeId === id) setAktivKundeId(null);
   }, [radgiver, lagredeKunder, aktivKundeId]);
@@ -620,164 +521,7 @@ export default function PensumPrognoseModell() {
     e.target.value = '';
   }, [lastKundeData]);
 
-
-  useEffect(() => {
-    try {
-      if (typeof window === 'undefined') return;
-      const stored = localStorage.getItem(PENSUM_PRODUCT_STORAGE_KEY);
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed && parsed.enkeltfond && parsed.fondsportefoljer && parsed.alternative) {
-          setPensumProdukter(parsed);
-        }
-      }
-    } catch (e) {
-      console.log('Kunne ikke lese admin-data:', e);
-    }
-  }, []);
-
-  useEffect(() => {
-    try {
-      if (typeof window === 'undefined') return;
-      localStorage.setItem(PENSUM_PRODUCT_STORAGE_KEY, JSON.stringify(pensumProdukter));
-    } catch (e) {
-      console.log('Kunne ikke lagre admin-data:', e);
-    }
-  }, [pensumProdukter]);
-
-  const unlockAdmin = useCallback(() => {
-    if (adminUnlockValue === ADMIN_PASSCODE) {
-      setAdminUnlocked(true);
-      setAdminStatus('Adminmodus aktivert');
-      setAdminUnlockValue('');
-    } else {
-      setAdminStatus('Feil passord');
-    }
-    setTimeout(() => setAdminStatus(''), 2500);
-  }, [adminUnlockValue]);
-
-  const lockAdmin = useCallback(() => {
-    setAdminUnlocked(false);
-    setVisAdminPanel(false);
-    setAdminUnlockValue('');
-    setAdminStatus('');
-  }, []);
-
-  const updatePensumProduktField = useCallback((kategori, id, field, value) => {
-    setPensumProdukter(prev => ({
-      ...prev,
-      [kategori]: prev[kategori].map(item => item.id === id ? {
-        ...item,
-        [field]: ['forventetAvkastning', 'aarlig3ar', 'risiko3ar', 'aar2024', 'aar2023', 'aar2022', 'aar2021', 'aar2020'].includes(field)
-          ? toNumeric(value)
-          : value
-      } : item)
-    }));
-  }, []);
-
-  const resetPensumProdukterTilDefault = useCallback(() => {
-    if (!confirm('Tilbakestille alle Pensum-produkter til standardverdier?')) return;
-    setPensumProdukter(deepClone(DEFAULT_PENSUM_PRODUKTER));
-    setAdminStatus('Standardverdier gjenopprettet');
-    setTimeout(() => setAdminStatus(''), 2500);
-  }, []);
-
-  const eksportPensumProdukter = useCallback(() => {
-    const blob = new Blob([JSON.stringify(pensumProdukter, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'pensum-produkter-admin.json';
-    link.click();
-    URL.revokeObjectURL(url);
-  }, [pensumProdukter]);
-
-  const importerPensumProdukterJson = useCallback((e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const parsed = JSON.parse(event.target.result);
-        if (!parsed?.enkeltfond || !parsed?.fondsportefoljer || !parsed?.alternative) throw new Error('Ugyldig fil');
-        setPensumProdukter(parsed);
-        setAdminStatus('Produktoppsett importert');
-      } catch (err) {
-        setAdminStatus('Kunne ikke lese JSON-fil');
-      }
-      setTimeout(() => setAdminStatus(''), 2500);
-    };
-    reader.readAsText(file);
-    e.target.value = '';
-  }, []);
-
-  const importerPensumExcel = useCallback(async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const xlsxModule = await import('xlsx');
-      const XLSX = xlsxModule?.default || xlsxModule;
-      const buffer = await file.arrayBuffer();
-      const workbook = XLSX.read(buffer, { type: 'array' });
-      const preferredSheet = workbook.SheetNames.find(name => normalizeText(name).includes('pensum')) || workbook.SheetNames[0];
-      const sheet = workbook.Sheets[preferredSheet];
-      const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: null, raw: true });
-
-      if (!rows[3]) throw new Error('Fant ikke forventet header-rad i Excel-filen.');
-      const headers = rows[3];
-      const seriesDefs = [];
-      for (let col = 1; col < headers.length; col++) {
-        const productName = headers[col];
-        if (productName && productName.toString().trim()) {
-          seriesDefs.push({ navn: productName.toString().trim(), dateCol: col, valueCol: col + 1 });
-          col += 1;
-        }
-      }
-      if (!seriesDefs.length) throw new Error('Fant ingen produktkolonner i rad 4.');
-
-      const updated = deepClone(pensumProdukter);
-      const flatUpdated = [...updated.enkeltfond, ...updated.fondsportefoljer, ...updated.alternative];
-      let count = 0;
-
-      seriesDefs.forEach((series) => {
-        const points = [];
-        for (let rowIndex = 6; rowIndex < rows.length; rowIndex++) {
-          const row = rows[rowIndex] || [];
-          const dt = toDateValue(row[series.dateCol]);
-          const val = toNumeric(row[series.valueCol]);
-          if (!dt || val === null) continue;
-          points.push({ date: dt, value: val });
-        }
-        if (points.length < 2) return;
-
-        const metrics = calculateFeedMetrics(points);
-        const product = findProductByName(flatUpdated, series.navn);
-        if (!product || !metrics) return;
-
-        product.aar2024 = metrics.aar2024;
-        product.aar2023 = metrics.aar2023;
-        product.aar2022 = metrics.aar2022;
-        product.aar2021 = metrics.aar2021;
-        product.aar2020 = metrics.aar2020;
-        product.aarlig3ar = metrics.aarlig3ar;
-        product.risiko3ar = metrics.risiko3ar;
-        product.sistOppdatert = metrics.sistOppdatert;
-        if (product.likviditet === 'likvid' && metrics.aarlig3ar !== null) {
-          product.forventetAvkastning = metrics.aarlig3ar;
-        }
-        count += 1;
-      });
-
-      setPensumProdukter(updated);
-      setAdminStatus('Oppdatert ' + count + ' produkter fra ' + file.name);
-    } catch (err) {
-      console.log(err);
-      setAdminStatus('Excel-import feilet: ' + (err?.message || 'ukjent feil'));
-    }
-    setTimeout(() => setAdminStatus(''), 4000);
-    e.target.value = '';
-  }, [pensumProdukter]);
-
+  
   const oppdaterSammenligningProfil = useCallback((nyProfil) => {
     setSammenligningProfil(nyProfil);
     setSammenligningAllokering(beregnAllokering(likvideTotal, peTotal, eiendomTotal, nyProfil));
@@ -1190,7 +934,11 @@ export default function PensumPrognoseModell() {
         </td>
         <td className="py-3 px-2">
           <div className="flex items-center justify-center">
-            <input type="text" value={localBelop} onChange={(e) => setLocalBelop(e.target.value)} onBlur={() => { const v = parseInt(localBelop.replace(/[^0-9]/g,''),10)||0; updateAllokeringVekt(index, parseFloat((v/totalKapital*100).toFixed(1))); }} className="w-28 text-center text-sm border border-gray-200 rounded py-1.5 px-2" />
+            <input type="text" value={localBelop} onChange={(e) => setLocalBelop(e.target.value)} onBlur={() => {
+              const v = parseInt(localBelop.replace(/[^0-9]/g, ''), 10) || 0;
+              const nyVekt = totalKapital > 0 ? parseFloat(((v / totalKapital) * 100).toFixed(1)) : 0;
+              updateAllokeringVekt(index, nyVekt);
+            }} className="w-28 text-center text-sm border border-gray-200 rounded py-1.5 px-2" />
             <span className="ml-1 text-gray-400 text-xs">kr</span>
           </div>
         </td>
@@ -1754,116 +1502,6 @@ export default function PensumPrognoseModell() {
 
         {activeTab === 'losninger' && (
           <div className="space-y-6 no-print">
-            <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-              <div className="px-6 py-4 flex flex-wrap items-center justify-between gap-3" style={{ backgroundColor: PENSUM_COLORS.darkBlue }}>
-                <div>
-                  <h3 className="text-lg font-semibold text-white">Admin</h3>
-                  <p className="text-xs text-blue-200">Kun UI-lås i nettleseren. Ikke ekte tilgangskontroll.</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => setVisAdminPanel(v => !v)} className="px-4 py-2 rounded-lg text-sm font-medium bg-white" style={{ color: PENSUM_COLORS.darkBlue }}>
-                    {visAdminPanel ? 'Skjul admin' : 'Vis admin'}
-                  </button>
-                  {adminUnlocked && (
-                    <button onClick={lockAdmin} className="px-4 py-2 rounded-lg text-sm font-medium border border-blue-300 text-white hover:bg-blue-800">
-                      Lås
-                    </button>
-                  )}
-                </div>
-              </div>
-              {visAdminPanel && (
-                <div className="p-6">
-                  {!adminUnlocked ? (
-                    <div className="max-w-md">
-                      <label className="block text-sm font-medium mb-2" style={{ color: PENSUM_COLORS.darkBlue }}>Admin-passord</label>
-                      <div className="flex gap-2">
-                        <input type="password" value={adminUnlockValue} onChange={(e) => setAdminUnlockValue(e.target.value)} className="flex-1 border border-gray-200 rounded-lg py-2.5 px-4" placeholder="Skriv inn passord" />
-                        <button onClick={unlockAdmin} className="px-4 py-2 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: PENSUM_COLORS.darkBlue }}>Lås opp</button>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-2">Bytt gjerne ADMIN_PASSCODE direkte i koden.</p>
-                      {adminStatus && <p className="text-sm mt-3" style={{ color: adminStatus.includes('Feil') ? PENSUM_COLORS.red : PENSUM_COLORS.green }}>{adminStatus}</p>}
-                    </div>
-                  ) : (
-                    <div className="space-y-6">
-                      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-                        <div className="border border-gray-200 rounded-xl p-4">
-                          <h4 className="font-semibold mb-2" style={{ color: PENSUM_COLORS.darkBlue }}>Månedlig Excel-import</h4>
-                          <p className="text-xs text-gray-500 mb-3">Last opp Excel-fil i samme format som datafeeden. Match skjer på produktnavn.</p>
-                          <label className="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium text-white cursor-pointer" style={{ backgroundColor: PENSUM_COLORS.darkBlue }}>
-                            Last opp Excel
-                            <input type="file" accept=".xlsx,.xls" onChange={importerPensumExcel} className="hidden" />
-                          </label>
-                        </div>
-                        <div className="border border-gray-200 rounded-xl p-4">
-                          <h4 className="font-semibold mb-2" style={{ color: PENSUM_COLORS.darkBlue }}>Produktoppsett</h4>
-                          <div className="flex flex-wrap gap-2">
-                            <button onClick={eksportPensumProdukter} className="px-3 py-2 rounded-lg text-sm border border-gray-200 hover:bg-gray-50" style={{ color: PENSUM_COLORS.darkBlue }}>Eksporter JSON</button>
-                            <label className="px-3 py-2 rounded-lg text-sm border border-gray-200 hover:bg-gray-50 cursor-pointer" style={{ color: PENSUM_COLORS.darkBlue }}>
-                              Importer JSON
-                              <input type="file" accept=".json" onChange={importerPensumProdukterJson} className="hidden" />
-                            </label>
-                          </div>
-                        </div>
-                        <div className="border border-gray-200 rounded-xl p-4">
-                          <h4 className="font-semibold mb-2" style={{ color: PENSUM_COLORS.darkBlue }}>Tilbakestill</h4>
-                          <button onClick={resetPensumProdukterTilDefault} className="px-3 py-2 rounded-lg text-sm border border-red-200 text-red-600 hover:bg-red-50">Gjenopprett standard</button>
-                        </div>
-                      </div>
-
-                      {adminStatus && (
-                        <div className="px-4 py-3 rounded-lg text-sm font-medium" style={{ backgroundColor: '#F0FDF4', color: PENSUM_COLORS.green }}>
-                          {adminStatus}
-                        </div>
-                      )}
-
-                      <div className="border border-gray-200 rounded-xl overflow-hidden">
-                        <div className="px-4 py-3" style={{ backgroundColor: PENSUM_COLORS.lightGray }}>
-                          <h4 className="font-semibold" style={{ color: PENSUM_COLORS.darkBlue }}>Manuell vedlikehold av produkter</h4>
-                        </div>
-                        <div className="p-4 overflow-x-auto">
-                          <table className="w-full text-sm">
-                            <thead>
-                              <tr style={{ backgroundColor: PENSUM_COLORS.darkBlue }}>
-                                <th className="py-2 px-3 text-left text-white">Navn</th>
-                                <th className="py-2 px-3 text-left text-white">Kategori</th>
-                                <th className="py-2 px-3 text-right text-white">Forv. avk</th>
-                                <th className="py-2 px-3 text-right text-white">Årlig 3 år</th>
-                                <th className="py-2 px-3 text-right text-white">Risiko 3 år</th>
-                                <th className="py-2 px-3 text-left text-white">Sist oppdatert</th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {[
-                                ...pensumProdukter.enkeltfond.map((item) => ({ ...item, adminKategori: 'enkeltfond' })),
-                                ...pensumProdukter.fondsportefoljer.map((item) => ({ ...item, adminKategori: 'fondsportefoljer' })),
-                                ...pensumProdukter.alternative.map((item) => ({ ...item, adminKategori: 'alternative' }))
-                              ].map((item, idx) => (
-                                <tr key={item.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                                  <td className="py-2 px-3">
-                                    <input type="text" value={item.navn} onChange={(e) => updatePensumProduktField(item.adminKategori, item.id, 'navn', e.target.value)} className="w-full border border-gray-200 rounded py-1.5 px-2" />
-                                  </td>
-                                  <td className="py-2 px-3 text-gray-600">{item.adminKategori}</td>
-                                  <td className="py-2 px-3">
-                                    <input type="number" step="0.1" value={item.forventetAvkastning ?? ''} onChange={(e) => updatePensumProduktField(item.adminKategori, item.id, 'forventetAvkastning', e.target.value)} className="w-24 ml-auto block border border-gray-200 rounded py-1.5 px-2 text-right" />
-                                  </td>
-                                  <td className="py-2 px-3">
-                                    <input type="number" step="0.1" value={item.aarlig3ar ?? ''} onChange={(e) => updatePensumProduktField(item.adminKategori, item.id, 'aarlig3ar', e.target.value)} className="w-24 ml-auto block border border-gray-200 rounded py-1.5 px-2 text-right" />
-                                  </td>
-                                  <td className="py-2 px-3">
-                                    <input type="number" step="0.1" value={item.risiko3ar ?? ''} onChange={(e) => updatePensumProduktField(item.adminKategori, item.id, 'risiko3ar', e.target.value)} className="w-24 ml-auto block border border-gray-200 rounded py-1.5 px-2 text-right" />
-                                  </td>
-                                  <td className="py-2 px-3 text-gray-500">{item.sistOppdatert || '—'}</td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
             {/* Header med standardporteføljer og innstillinger */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
               <div className="px-6 py-4" style={{ backgroundColor: PENSUM_COLORS.darkBlue }}>
