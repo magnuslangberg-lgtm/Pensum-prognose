@@ -315,6 +315,13 @@ export default function PensumPrognoseModell() {
     return totalVekt > 0 ? vektetSum / totalVekt : 0;
   }, [pensumAllokering, pensumProdukter]);
 
+  const likvideTotal = aksjerKunde + aksjefondKunde + renterKunde + kontanterKunde;
+  const peTotal = peFondKunde + unoterteAksjerKunde + shippingKunde;
+  const eiendomTotal = egenEiendomKunde + eiendomSyndikatKunde + eiendomFondKunde;
+  const illikvideTotal = peTotal + eiendomTotal;
+  const totalKapital = likvideTotal + illikvideTotal;
+  const nettoKontantstrom = innskudd - uttak;
+
   // Beregn prognose for Pensum-portefølje
   const pensumPrognose = useMemo(() => {
     const avkastning = pensumForventetAvkastning / 100;
@@ -514,13 +521,6 @@ export default function PensumPrognoseModell() {
     reader.readAsText(file);
     e.target.value = '';
   }, [lastKundeData]);
-
-  const likvideTotal = aksjerKunde + aksjefondKunde + renterKunde + kontanterKunde;
-  const peTotal = peFondKunde + unoterteAksjerKunde + shippingKunde;
-  const eiendomTotal = egenEiendomKunde + eiendomSyndikatKunde + eiendomFondKunde;
-  const illikvideTotal = peTotal + eiendomTotal;
-  const totalKapital = likvideTotal + illikvideTotal;
-  const nettoKontantstrom = innskudd - uttak;
 
   const oppdaterSammenligningProfil = useCallback((nyProfil) => {
     setSammenligningProfil(nyProfil);
