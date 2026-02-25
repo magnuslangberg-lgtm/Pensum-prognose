@@ -343,25 +343,25 @@ export default function PensumPrognoseModell() {
 
   // Last lagrede kunder ved oppstart
   useEffect(() => {
-    const lastKunder = async () => {
-      if (radgiver) {
-        const storageKey = 'pensum_kunder_' + radgiver.toLowerCase().replace(/\s+/g, '_');
-        try {
-          // Prøv window.storage først (Claude's persistent storage)
-          if (window.storage && window.storage.get) {
-            const result = await window.storage.get(storageKey);
-            if (result && result.value) {
-              setLagredeKunder(JSON.parse(result.value));
-              return;
-            }
-          }
-        } catch (e) {
-          console.log('Storage not available:', e);
+    const lastKunder = () => {
+      if (!radgiver) {
+        setLagredeKunder([]);
+        return;
+      }
+
+      const storageKey = 'pensum_kunder_' + radgiver.toLowerCase().replace(/\s+/g, '_');
+
+      try {
+        if (typeof window !== 'undefined') {
+          const raw = localStorage.getItem(storageKey);
+          setLagredeKunder(raw ? JSON.parse(raw) : []);
         }
-        // Fallback: ingen lagrede kunder
+      } catch (e) {
+        console.log('LocalStorage not available:', e);
         setLagredeKunder([]);
       }
     };
+
     lastKunder();
   }, [radgiver]);
 
@@ -409,7 +409,7 @@ export default function PensumPrognoseModell() {
   }, []);
 
   // Lagre kunde
-  const lagreKunde = useCallback(async () => {
+  const lagreKunde = useCallback(() => {
     if (!radgiver) {
       alert('Vennligst fyll inn rådgivernavn først');
       return;
@@ -418,50 +418,49 @@ export default function PensumPrognoseModell() {
       alert('Vennligst fyll inn kundenavn først');
       return;
     }
+
     const storageKey = 'pensum_kunder_' + radgiver.toLowerCase().replace(/\s+/g, '_');
     const kundeData = getKundeData();
-    
+
     let oppdatertListe;
     const eksisterendeIndex = lagredeKunder.findIndex(k => k.id === kundeData.id);
+
     if (eksisterendeIndex >= 0) {
       oppdatertListe = [...lagredeKunder];
       oppdatertListe[eksisterendeIndex] = kundeData;
     } else {
       oppdatertListe = [...lagredeKunder, kundeData];
     }
-    
+
     try {
-      if (window.storage && window.storage.set) {
-        await window.storage.set(storageKey, JSON.stringify(oppdatertListe));
-        setLagredeKunder(oppdatertListe);
-        setAktivKundeId(kundeData.id);
-        setLagringsStatus('Lagret!');
-        setTimeout(() => setLagringsStatus(''), 2000);
-      } else {
-        throw new Error('Storage not available');
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(storageKey, JSON.stringify(oppdatertListe));
       }
-    } catch (e) {
-      // Fallback: tilby nedlasting av fil
       setLagredeKunder(oppdatertListe);
       setAktivKundeId(kundeData.id);
-      alert('Automatisk lagring er ikke tilgjengelig i denne nettleseren. Bruk "Eksporter" for å lagre kunden som fil.');
+      setLagringsStatus('Lagret!');
+      setTimeout(() => setLagringsStatus(''), 2000);
+    } catch (e) {
+      console.log('Could not save to localStorage:', e);
+      alert('Kunne ikke lagre lokalt i nettleseren.');
     }
   }, [radgiver, kundeNavn, getKundeData, lagredeKunder]);
 
   // Slett kunde
-  const slettKunde = useCallback(async (id) => {
+  const slettKunde = useCallback((id) => {
     if (!confirm('Er du sikker på at du vil slette denne kunden?')) return;
+
     const storageKey = 'pensum_kunder_' + radgiver.toLowerCase().replace(/\s+/g, '_');
     const oppdatertListe = lagredeKunder.filter(k => k.id !== id);
-    
+
     try {
-      if (window.storage && window.storage.set) {
-        await window.storage.set(storageKey, JSON.stringify(oppdatertListe));
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(storageKey, JSON.stringify(oppdatertListe));
       }
     } catch (e) {
-      console.log('Could not save to storage:', e);
+      console.log('Could not save to localStorage:', e);
     }
-    
+
     setLagredeKunder(oppdatertListe);
     if (aktivKundeId === id) setAktivKundeId(null);
   }, [radgiver, lagredeKunder, aktivKundeId]);
@@ -522,6 +521,7 @@ export default function PensumPrognoseModell() {
     e.target.value = '';
   }, [lastKundeData]);
 
+  
   const oppdaterSammenligningProfil = useCallback((nyProfil) => {
     setSammenligningProfil(nyProfil);
     setSammenligningAllokering(beregnAllokering(likvideTotal, peTotal, eiendomTotal, nyProfil));
@@ -934,7 +934,11 @@ export default function PensumPrognoseModell() {
         </td>
         <td className="py-3 px-2">
           <div className="flex items-center justify-center">
-            <input type="text" value={localBelop} onChange={(e) => setLocalBelop(e.target.value)} onBlur={() => { const v = parseInt(localBelop.replace(/[^0-9]/g,''),10)||0; updateAllokeringVekt(index, parseFloat((v/totalKapital*100).toFixed(1))); }} className="w-28 text-center text-sm border border-gray-200 rounded py-1.5 px-2" />
+            <input type="text" value={localBelop} onChange={(e) => setLocalBelop(e.target.value)} onBlur={() => {
+              const v = parseInt(localBelop.replace(/[^0-9]/g, ''), 10) || 0;
+              const nyVekt = totalKapital > 0 ? parseFloat(((v / totalKapital) * 100).toFixed(1)) : 0;
+              updateAllokeringVekt(index, nyVekt);
+            }} className="w-28 text-center text-sm border border-gray-200 rounded py-1.5 px-2" />
             <span className="ml-1 text-gray-400 text-xs">kr</span>
           </div>
         </td>
