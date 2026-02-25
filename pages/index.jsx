@@ -1955,5 +1955,3 @@ export default function PensumPrognoseModell() {
     </div>
   );
 }
-
-export default PensumPrognose;
