@@ -109,7 +109,9 @@ export default function PensumPrognoseModell() {
   // Pensum Løsninger - fond og mandater med historisk avkastning
   // aktivatype: 'aksje', 'rente' eller 'alternativ'
   // likviditet: 'likvid' eller 'illikvid'
-  const [pensumProdukter] = useState({
+  const PENSUM_PRODUKTER_STORAGE_KEY = 'pensum_produkter_admin_v1';
+
+  const STANDARD_PENSUM_PRODUKTER = {
     enkeltfond: [
       { id: 'norge-a', navn: 'Pensum Norge A', aktivatype: 'aksje', likviditet: 'likvid', aar2024: 21.5, aar2023: 17.7, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
       { id: 'energy-a', navn: 'Pensum Global Energy A', aktivatype: 'aksje', likviditet: 'likvid', aar2024: 7.3, aar2023: -1.1, aar2022: 11.0, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
@@ -127,7 +129,44 @@ export default function PensumPrognoseModell() {
       { id: 'amaron-re', navn: 'Amaron Real Estate', aktivatype: 'alternativ', likviditet: 'illikvid', forventetAvkastning: 12.0, aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: 12.0, risiko3ar: null },
       { id: 'unoterte-aksjer', navn: 'Unoterte aksjer', aktivatype: 'alternativ', likviditet: 'illikvid', forventetAvkastning: 12.0, aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: 12.0, risiko3ar: null }
     ]
-  });
+  };
+
+  const [pensumProdukter, setPensumProdukter] = useState(STANDARD_PENSUM_PRODUKTER);
+
+  useEffect(() => {
+    try {
+      if (typeof window === 'undefined') return;
+
+      const raw = window.localStorage.getItem(PENSUM_PRODUKTER_STORAGE_KEY);
+      if (!raw) return;
+
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.enkeltfond || !parsed.fondsportefoljer || !parsed.alternative) return;
+
+      const mergeById = (base, incoming) => {
+        const map = new Map();
+
+        base.forEach((item) => {
+          map.set(item.id, item);
+        });
+
+        (incoming || []).forEach((item) => {
+          if (!item || !item.id) return;
+          map.set(item.id, { ...(map.get(item.id) || {}), ...item });
+        });
+
+        return Array.from(map.values());
+      };
+
+      setPensumProdukter({
+        enkeltfond: mergeById(STANDARD_PENSUM_PRODUKTER.enkeltfond, parsed.enkeltfond),
+        fondsportefoljer: mergeById(STANDARD_PENSUM_PRODUKTER.fondsportefoljer, parsed.fondsportefoljer),
+        alternative: mergeById(STANDARD_PENSUM_PRODUKTER.alternative, parsed.alternative)
+      });
+    } catch (error) {
+      console.log('Kunne ikke laste admin-data:', error);
+    }
+  }, []);
 
   // Innstillinger for Pensum Løsninger
   const [visAlternative, setVisAlternative] = useState(false);
@@ -315,13 +354,6 @@ export default function PensumPrognoseModell() {
     return totalVekt > 0 ? vektetSum / totalVekt : 0;
   }, [pensumAllokering, pensumProdukter]);
 
-  const likvideTotal = aksjerKunde + aksjefondKunde + renterKunde + kontanterKunde;
-  const peTotal = peFondKunde + unoterteAksjerKunde + shippingKunde;
-  const eiendomTotal = egenEiendomKunde + eiendomSyndikatKunde + eiendomFondKunde;
-  const illikvideTotal = peTotal + eiendomTotal;
-  const totalKapital = likvideTotal + illikvideTotal;
-  const nettoKontantstrom = innskudd - uttak;
-
   // Beregn prognose for Pensum-portefølje
   const pensumPrognose = useMemo(() => {
     const avkastning = pensumForventetAvkastning / 100;
@@ -343,25 +375,25 @@ export default function PensumPrognoseModell() {
 
   // Last lagrede kunder ved oppstart
   useEffect(() => {
-    const lastKunder = () => {
-      if (!radgiver) {
-        setLagredeKunder([]);
-        return;
-      }
-
-      const storageKey = 'pensum_kunder_' + radgiver.toLowerCase().replace(/\s+/g, '_');
-
-      try {
-        if (typeof window !== 'undefined') {
-          const raw = localStorage.getItem(storageKey);
-          setLagredeKunder(raw ? JSON.parse(raw) : []);
+    const lastKunder = async () => {
+      if (radgiver) {
+        const storageKey = 'pensum_kunder_' + radgiver.toLowerCase().replace(/\s+/g, '_');
+        try {
+          // Prøv window.storage først (Claude's persistent storage)
+          if (window.storage && window.storage.get) {
+            const result = await window.storage.get(storageKey);
+            if (result && result.value) {
+              setLagredeKunder(JSON.parse(result.value));
+              return;
+            }
+          }
+        } catch (e) {
+          console.log('Storage not available:', e);
         }
-      } catch (e) {
-        console.log('LocalStorage not available:', e);
+        // Fallback: ingen lagrede kunder
         setLagredeKunder([]);
       }
     };
-
     lastKunder();
   }, [radgiver]);
 
@@ -409,7 +441,7 @@ export default function PensumPrognoseModell() {
   }, []);
 
   // Lagre kunde
-  const lagreKunde = useCallback(() => {
+  const lagreKunde = useCallback(async () => {
     if (!radgiver) {
       alert('Vennligst fyll inn rådgivernavn først');
       return;
@@ -418,49 +450,50 @@ export default function PensumPrognoseModell() {
       alert('Vennligst fyll inn kundenavn først');
       return;
     }
-
     const storageKey = 'pensum_kunder_' + radgiver.toLowerCase().replace(/\s+/g, '_');
     const kundeData = getKundeData();
-
+    
     let oppdatertListe;
     const eksisterendeIndex = lagredeKunder.findIndex(k => k.id === kundeData.id);
-
     if (eksisterendeIndex >= 0) {
       oppdatertListe = [...lagredeKunder];
       oppdatertListe[eksisterendeIndex] = kundeData;
     } else {
       oppdatertListe = [...lagredeKunder, kundeData];
     }
-
+    
     try {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(storageKey, JSON.stringify(oppdatertListe));
+      if (window.storage && window.storage.set) {
+        await window.storage.set(storageKey, JSON.stringify(oppdatertListe));
+        setLagredeKunder(oppdatertListe);
+        setAktivKundeId(kundeData.id);
+        setLagringsStatus('Lagret!');
+        setTimeout(() => setLagringsStatus(''), 2000);
+      } else {
+        throw new Error('Storage not available');
       }
+    } catch (e) {
+      // Fallback: tilby nedlasting av fil
       setLagredeKunder(oppdatertListe);
       setAktivKundeId(kundeData.id);
-      setLagringsStatus('Lagret!');
-      setTimeout(() => setLagringsStatus(''), 2000);
-    } catch (e) {
-      console.log('Could not save to localStorage:', e);
-      alert('Kunne ikke lagre lokalt i nettleseren.');
+      alert('Automatisk lagring er ikke tilgjengelig i denne nettleseren. Bruk "Eksporter" for å lagre kunden som fil.');
     }
   }, [radgiver, kundeNavn, getKundeData, lagredeKunder]);
 
   // Slett kunde
-  const slettKunde = useCallback((id) => {
+  const slettKunde = useCallback(async (id) => {
     if (!confirm('Er du sikker på at du vil slette denne kunden?')) return;
-
     const storageKey = 'pensum_kunder_' + radgiver.toLowerCase().replace(/\s+/g, '_');
     const oppdatertListe = lagredeKunder.filter(k => k.id !== id);
-
+    
     try {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(storageKey, JSON.stringify(oppdatertListe));
+      if (window.storage && window.storage.set) {
+        await window.storage.set(storageKey, JSON.stringify(oppdatertListe));
       }
     } catch (e) {
-      console.log('Could not save to localStorage:', e);
+      console.log('Could not save to storage:', e);
     }
-
+    
     setLagredeKunder(oppdatertListe);
     if (aktivKundeId === id) setAktivKundeId(null);
   }, [radgiver, lagredeKunder, aktivKundeId]);
@@ -521,7 +554,13 @@ export default function PensumPrognoseModell() {
     e.target.value = '';
   }, [lastKundeData]);
 
-  
+  const likvideTotal = aksjerKunde + aksjefondKunde + renterKunde + kontanterKunde;
+  const peTotal = peFondKunde + unoterteAksjerKunde + shippingKunde;
+  const eiendomTotal = egenEiendomKunde + eiendomSyndikatKunde + eiendomFondKunde;
+  const illikvideTotal = peTotal + eiendomTotal;
+  const totalKapital = likvideTotal + illikvideTotal;
+  const nettoKontantstrom = innskudd - uttak;
+
   const oppdaterSammenligningProfil = useCallback((nyProfil) => {
     setSammenligningProfil(nyProfil);
     setSammenligningAllokering(beregnAllokering(likvideTotal, peTotal, eiendomTotal, nyProfil));
@@ -934,11 +973,7 @@ export default function PensumPrognoseModell() {
         </td>
         <td className="py-3 px-2">
           <div className="flex items-center justify-center">
-            <input type="text" value={localBelop} onChange={(e) => setLocalBelop(e.target.value)} onBlur={() => {
-              const v = parseInt(localBelop.replace(/[^0-9]/g, ''), 10) || 0;
-              const nyVekt = totalKapital > 0 ? parseFloat(((v / totalKapital) * 100).toFixed(1)) : 0;
-              updateAllokeringVekt(index, nyVekt);
-            }} className="w-28 text-center text-sm border border-gray-200 rounded py-1.5 px-2" />
+            <input type="text" value={localBelop} onChange={(e) => setLocalBelop(e.target.value)} onBlur={() => { const v = parseInt(localBelop.replace(/[^0-9]/g,''),10)||0; updateAllokeringVekt(index, parseFloat((v/totalKapital*100).toFixed(1))); }} className="w-28 text-center text-sm border border-gray-200 rounded py-1.5 px-2" />
             <span className="ml-1 text-gray-400 text-xs">kr</span>
           </div>
         </td>
