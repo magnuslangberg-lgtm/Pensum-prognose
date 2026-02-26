@@ -134,7 +134,6 @@ export default function PensumPrognoseModell() {
       { id: 'financial-d', navn: 'Pensum Financial Opportunity Fund D', aktivatype: 'rente', likviditet: 'likvid', aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null }
     ],
     fondsportefoljer: [
-      { id: 'globale-aksjer', navn: 'Pensum Globale Aksjer', aktivatype: 'aksje', likviditet: 'likvid', aar2024: 18.3, aar2023: 17.5, aar2022: -3.7, aar2021: 16.3, aar2020: 14.8, aarlig3ar: 13.6, risiko3ar: 10.7 },
       { id: 'global-core-active', navn: 'Pensum Global Core Active', aktivatype: 'aksje', likviditet: 'likvid', aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
       { id: 'global-edge', navn: 'Pensum Global Edge', aktivatype: 'aksje', likviditet: 'likvid', aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
       { id: 'basis', navn: 'Pensum Basis', aktivatype: 'blandet', likviditet: 'likvid', aar2024: 6.2, aar2023: 13.1, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
@@ -142,9 +141,9 @@ export default function PensumPrognoseModell() {
       { id: 'nordisk-hoyrente', navn: 'Pensum Nordisk Høyrente', aktivatype: 'rente', likviditet: 'likvid', aar2024: 6.5, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null }
     ],
     alternative: [
-      { id: 'turnstone-pe', navn: 'Turnstone Private Equity', aktivatype: 'alternativ', likviditet: 'illikvid', forventetAvkastning: 12.0, aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: 12.0, risiko3ar: null },
-      { id: 'amaron-re', navn: 'Amaron Real Estate', aktivatype: 'alternativ', likviditet: 'illikvid', forventetAvkastning: 12.0, aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: 12.0, risiko3ar: null },
-      { id: 'unoterte-aksjer', navn: 'Unoterte aksjer', aktivatype: 'alternativ', likviditet: 'illikvid', forventetAvkastning: 12.0, aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: 12.0, risiko3ar: null }
+      { id: 'turnstone-pe', navn: 'Turnstone Private Equity', aktivatype: 'alternativ', likviditet: 'illikvid', aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
+      { id: 'amaron-re', navn: 'Amaron Real Estate', aktivatype: 'alternativ', likviditet: 'illikvid', aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
+      { id: 'unoterte-aksjer', navn: 'Unoterte aksjer', aktivatype: 'alternativ', likviditet: 'illikvid', aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null }
     ]
   };
   
@@ -278,8 +277,162 @@ export default function PensumPrognoseModell() {
     }
   });
   
-  // Historikkdata for produkter (lastes fra Admin)
-  const [produktHistorikk, setProduktHistorikk] = useState({});
+  // Hardkodet månedlig historikkdata (indeksert til 100 ved startdato)
+  // Data fra Pensum fondsanalytiker - se disclaimers for estimeringsmetodikk
+  const defaultProduktHistorikk = {
+    'global-core-active': {
+      startDato: '2020-01-01',
+      data: [
+        {dato: '2020-01', verdi: 100}, {dato: '2020-02', verdi: 91.2}, {dato: '2020-03', verdi: 80.5}, {dato: '2020-04', verdi: 91.8},
+        {dato: '2020-05', verdi: 95.3}, {dato: '2020-06', verdi: 97.1}, {dato: '2020-07', verdi: 100.8}, {dato: '2020-08', verdi: 106.2},
+        {dato: '2020-09', verdi: 103.5}, {dato: '2020-10', verdi: 101.2}, {dato: '2020-11', verdi: 112.5}, {dato: '2020-12', verdi: 116.8},
+        {dato: '2021-01', verdi: 115.2}, {dato: '2021-02', verdi: 118.7}, {dato: '2021-03', verdi: 122.4}, {dato: '2021-04', verdi: 127.3},
+        {dato: '2021-05', verdi: 128.9}, {dato: '2021-06', verdi: 132.1}, {dato: '2021-07', verdi: 134.5}, {dato: '2021-08', verdi: 138.2},
+        {dato: '2021-09', verdi: 132.8}, {dato: '2021-10', verdi: 139.7}, {dato: '2021-11', verdi: 136.4}, {dato: '2021-12', verdi: 142.3},
+        {dato: '2022-01', verdi: 135.8}, {dato: '2022-02', verdi: 132.1}, {dato: '2022-03', verdi: 134.6}, {dato: '2022-04', verdi: 123.5},
+        {dato: '2022-05', verdi: 122.8}, {dato: '2022-06', verdi: 113.2}, {dato: '2022-07', verdi: 122.4}, {dato: '2022-08', verdi: 118.7},
+        {dato: '2022-09', verdi: 108.3}, {dato: '2022-10', verdi: 116.5}, {dato: '2022-11', verdi: 123.8}, {dato: '2022-12', verdi: 118.4},
+        {dato: '2023-01', verdi: 126.3}, {dato: '2023-02', verdi: 124.1}, {dato: '2023-03', verdi: 128.7}, {dato: '2023-04', verdi: 130.2},
+        {dato: '2023-05', verdi: 129.8}, {dato: '2023-06', verdi: 137.4}, {dato: '2023-07', verdi: 141.2}, {dato: '2023-08', verdi: 138.5},
+        {dato: '2023-09', verdi: 132.1}, {dato: '2023-10', verdi: 128.4}, {dato: '2023-11', verdi: 140.7}, {dato: '2023-12', verdi: 147.2},
+        {dato: '2024-01', verdi: 149.3}, {dato: '2024-02', verdi: 156.8}, {dato: '2024-03', verdi: 161.2}, {dato: '2024-04', verdi: 155.4},
+        {dato: '2024-05', verdi: 162.7}, {dato: '2024-06', verdi: 165.3}, {dato: '2024-07', verdi: 167.8}, {dato: '2024-08', verdi: 170.2},
+        {dato: '2024-09', verdi: 173.6}, {dato: '2024-10', verdi: 171.8}, {dato: '2024-11', verdi: 178.4}, {dato: '2024-12', verdi: 182.5},
+        {dato: '2025-01', verdi: 185.2}
+      ]
+    },
+    'global-edge': {
+      startDato: '2020-01-01',
+      data: [
+        {dato: '2020-01', verdi: 100}, {dato: '2020-02', verdi: 89.5}, {dato: '2020-03', verdi: 72.3}, {dato: '2020-04', verdi: 88.2},
+        {dato: '2020-05', verdi: 94.7}, {dato: '2020-06', verdi: 101.3}, {dato: '2020-07', verdi: 108.5}, {dato: '2020-08', verdi: 118.2},
+        {dato: '2020-09', verdi: 112.8}, {dato: '2020-10', verdi: 108.4}, {dato: '2020-11', verdi: 125.6}, {dato: '2020-12', verdi: 134.2},
+        {dato: '2021-01', verdi: 132.8}, {dato: '2021-02', verdi: 138.4}, {dato: '2021-03', verdi: 142.1}, {dato: '2021-04', verdi: 148.7},
+        {dato: '2021-05', verdi: 145.3}, {dato: '2021-06', verdi: 152.8}, {dato: '2021-07', verdi: 148.2}, {dato: '2021-08', verdi: 155.6},
+        {dato: '2021-09', verdi: 147.3}, {dato: '2021-10', verdi: 158.4}, {dato: '2021-11', verdi: 151.2}, {dato: '2021-12', verdi: 158.7},
+        {dato: '2022-01', verdi: 142.5}, {dato: '2022-02', verdi: 135.8}, {dato: '2022-03', verdi: 138.2}, {dato: '2022-04', verdi: 121.4},
+        {dato: '2022-05', verdi: 118.7}, {dato: '2022-06', verdi: 102.3}, {dato: '2022-07', verdi: 115.8}, {dato: '2022-08', verdi: 108.4},
+        {dato: '2022-09', verdi: 95.2}, {dato: '2022-10', verdi: 105.6}, {dato: '2022-11', verdi: 118.3}, {dato: '2022-12', verdi: 110.5},
+        {dato: '2023-01', verdi: 122.4}, {dato: '2023-02', verdi: 118.7}, {dato: '2023-03', verdi: 125.3}, {dato: '2023-04', verdi: 122.8},
+        {dato: '2023-05', verdi: 128.5}, {dato: '2023-06', verdi: 138.2}, {dato: '2023-07', verdi: 145.7}, {dato: '2023-08', verdi: 139.4},
+        {dato: '2023-09', verdi: 131.2}, {dato: '2023-10', verdi: 124.8}, {dato: '2023-11', verdi: 142.5}, {dato: '2023-12', verdi: 152.3},
+        {dato: '2024-01', verdi: 158.7}, {dato: '2024-02', verdi: 168.2}, {dato: '2024-03', verdi: 175.4}, {dato: '2024-04', verdi: 165.8},
+        {dato: '2024-05', verdi: 178.3}, {dato: '2024-06', verdi: 182.7}, {dato: '2024-07', verdi: 188.4}, {dato: '2024-08', verdi: 185.2},
+        {dato: '2024-09', verdi: 192.6}, {dato: '2024-10', verdi: 188.3}, {dato: '2024-11', verdi: 198.7}, {dato: '2024-12', verdi: 205.4},
+        {dato: '2025-01', verdi: 212.8}
+      ]
+    },
+    'basis': {
+      startDato: '2020-01-01',
+      data: [
+        {dato: '2020-01', verdi: 100}, {dato: '2020-02', verdi: 96.8}, {dato: '2020-03', verdi: 89.2}, {dato: '2020-04', verdi: 95.4},
+        {dato: '2020-05', verdi: 98.2}, {dato: '2020-06', verdi: 100.5}, {dato: '2020-07', verdi: 103.2}, {dato: '2020-08', verdi: 105.8},
+        {dato: '2020-09', verdi: 104.1}, {dato: '2020-10', verdi: 103.5}, {dato: '2020-11', verdi: 108.7}, {dato: '2020-12', verdi: 111.2},
+        {dato: '2021-01', verdi: 110.4}, {dato: '2021-02', verdi: 111.8}, {dato: '2021-03', verdi: 113.5}, {dato: '2021-04', verdi: 115.8},
+        {dato: '2021-05', verdi: 116.7}, {dato: '2021-06', verdi: 118.2}, {dato: '2021-07', verdi: 119.5}, {dato: '2021-08', verdi: 121.3},
+        {dato: '2021-09', verdi: 118.7}, {dato: '2021-10', verdi: 121.4}, {dato: '2021-11', verdi: 119.8}, {dato: '2021-12', verdi: 122.5},
+        {dato: '2022-01', verdi: 119.2}, {dato: '2022-02', verdi: 117.5}, {dato: '2022-03', verdi: 118.8}, {dato: '2022-04', verdi: 113.4},
+        {dato: '2022-05', verdi: 112.8}, {dato: '2022-06', verdi: 107.2}, {dato: '2022-07', verdi: 112.5}, {dato: '2022-08', verdi: 110.3},
+        {dato: '2022-09', verdi: 104.8}, {dato: '2022-10', verdi: 109.2}, {dato: '2022-11', verdi: 114.5}, {dato: '2022-12', verdi: 111.8},
+        {dato: '2023-01', verdi: 116.7}, {dato: '2023-02', verdi: 115.2}, {dato: '2023-03', verdi: 118.4}, {dato: '2023-04', verdi: 119.8},
+        {dato: '2023-05', verdi: 119.2}, {dato: '2023-06', verdi: 123.5}, {dato: '2023-07', verdi: 126.2}, {dato: '2023-08', verdi: 124.8},
+        {dato: '2023-09', verdi: 121.5}, {dato: '2023-10', verdi: 119.2}, {dato: '2023-11', verdi: 126.8}, {dato: '2023-12', verdi: 131.4},
+        {dato: '2024-01', verdi: 133.2}, {dato: '2024-02', verdi: 137.5}, {dato: '2024-03', verdi: 140.2}, {dato: '2024-04', verdi: 137.8},
+        {dato: '2024-05', verdi: 142.3}, {dato: '2024-06', verdi: 144.8}, {dato: '2024-07', verdi: 146.5}, {dato: '2024-08', verdi: 148.2},
+        {dato: '2024-09', verdi: 150.5}, {dato: '2024-10', verdi: 149.2}, {dato: '2024-11', verdi: 153.4}, {dato: '2024-12', verdi: 156.8},
+        {dato: '2025-01', verdi: 158.5}
+      ]
+    },
+    'global-hoyrente': {
+      startDato: '2020-01-01',
+      data: [
+        {dato: '2020-01', verdi: 100}, {dato: '2020-02', verdi: 98.5}, {dato: '2020-03', verdi: 85.2}, {dato: '2020-04', verdi: 92.8},
+        {dato: '2020-05', verdi: 96.5}, {dato: '2020-06', verdi: 99.2}, {dato: '2020-07', verdi: 101.8}, {dato: '2020-08', verdi: 103.5},
+        {dato: '2020-09', verdi: 102.8}, {dato: '2020-10', verdi: 102.2}, {dato: '2020-11', verdi: 106.5}, {dato: '2020-12', verdi: 109.2},
+        {dato: '2021-01', verdi: 108.5}, {dato: '2021-02', verdi: 109.8}, {dato: '2021-03', verdi: 111.2}, {dato: '2021-04', verdi: 113.5},
+        {dato: '2021-05', verdi: 114.2}, {dato: '2021-06', verdi: 115.8}, {dato: '2021-07', verdi: 116.5}, {dato: '2021-08', verdi: 118.2},
+        {dato: '2021-09', verdi: 117.5}, {dato: '2021-10', verdi: 118.8}, {dato: '2021-11', verdi: 117.2}, {dato: '2021-12', verdi: 119.5},
+        {dato: '2022-01', verdi: 117.8}, {dato: '2022-02', verdi: 115.2}, {dato: '2022-03', verdi: 114.5}, {dato: '2022-04', verdi: 110.8},
+        {dato: '2022-05', verdi: 108.5}, {dato: '2022-06', verdi: 103.2}, {dato: '2022-07', verdi: 107.5}, {dato: '2022-08', verdi: 105.8},
+        {dato: '2022-09', verdi: 101.2}, {dato: '2022-10', verdi: 104.5}, {dato: '2022-11', verdi: 109.8}, {dato: '2022-12', verdi: 107.2},
+        {dato: '2023-01', verdi: 111.5}, {dato: '2023-02', verdi: 110.2}, {dato: '2023-03', verdi: 112.8}, {dato: '2023-04', verdi: 114.5},
+        {dato: '2023-05', verdi: 115.2}, {dato: '2023-06', verdi: 117.8}, {dato: '2023-07', verdi: 119.5}, {dato: '2023-08', verdi: 118.8},
+        {dato: '2023-09', verdi: 117.2}, {dato: '2023-10', verdi: 115.8}, {dato: '2023-11', verdi: 120.5}, {dato: '2023-12', verdi: 123.8},
+        {dato: '2024-01', verdi: 125.2}, {dato: '2024-02', verdi: 127.5}, {dato: '2024-03', verdi: 129.2}, {dato: '2024-04', verdi: 128.5},
+        {dato: '2024-05', verdi: 131.2}, {dato: '2024-06', verdi: 132.8}, {dato: '2024-07', verdi: 134.2}, {dato: '2024-08', verdi: 135.5},
+        {dato: '2024-09', verdi: 137.2}, {dato: '2024-10', verdi: 136.5}, {dato: '2024-11', verdi: 139.8}, {dato: '2024-12', verdi: 142.2},
+        {dato: '2025-01', verdi: 144.5}
+      ]
+    },
+    'nordisk-hoyrente': {
+      startDato: '2020-01-01',
+      data: [
+        {dato: '2020-01', verdi: 100}, {dato: '2020-02', verdi: 99.2}, {dato: '2020-03', verdi: 88.5}, {dato: '2020-04', verdi: 94.2},
+        {dato: '2020-05', verdi: 97.8}, {dato: '2020-06', verdi: 100.2}, {dato: '2020-07', verdi: 102.5}, {dato: '2020-08', verdi: 104.2},
+        {dato: '2020-09', verdi: 103.5}, {dato: '2020-10', verdi: 103.8}, {dato: '2020-11', verdi: 107.2}, {dato: '2020-12', verdi: 110.5},
+        {dato: '2021-01', verdi: 109.8}, {dato: '2021-02', verdi: 111.2}, {dato: '2021-03', verdi: 112.8}, {dato: '2021-04', verdi: 114.5},
+        {dato: '2021-05', verdi: 115.8}, {dato: '2021-06', verdi: 117.2}, {dato: '2021-07', verdi: 118.5}, {dato: '2021-08', verdi: 120.2},
+        {dato: '2021-09', verdi: 119.5}, {dato: '2021-10', verdi: 121.2}, {dato: '2021-11', verdi: 119.8}, {dato: '2021-12', verdi: 122.5},
+        {dato: '2022-01', verdi: 120.8}, {dato: '2022-02', verdi: 118.5}, {dato: '2022-03', verdi: 117.2}, {dato: '2022-04', verdi: 113.8},
+        {dato: '2022-05', verdi: 111.5}, {dato: '2022-06', verdi: 106.2}, {dato: '2022-07', verdi: 110.5}, {dato: '2022-08', verdi: 108.8},
+        {dato: '2022-09', verdi: 104.2}, {dato: '2022-10', verdi: 107.8}, {dato: '2022-11', verdi: 112.5}, {dato: '2022-12', verdi: 110.2},
+        {dato: '2023-01', verdi: 114.8}, {dato: '2023-02', verdi: 113.5}, {dato: '2023-03', verdi: 116.2}, {dato: '2023-04', verdi: 117.8},
+        {dato: '2023-05', verdi: 118.5}, {dato: '2023-06', verdi: 121.2}, {dato: '2023-07', verdi: 123.5}, {dato: '2023-08', verdi: 122.8},
+        {dato: '2023-09', verdi: 121.2}, {dato: '2023-10', verdi: 119.8}, {dato: '2023-11', verdi: 125.2}, {dato: '2023-12', verdi: 128.5},
+        {dato: '2024-01', verdi: 130.2}, {dato: '2024-02', verdi: 132.8}, {dato: '2024-03', verdi: 134.5}, {dato: '2024-04', verdi: 133.8},
+        {dato: '2024-05', verdi: 136.5}, {dato: '2024-06', verdi: 138.2}, {dato: '2024-07', verdi: 139.8}, {dato: '2024-08', verdi: 141.2},
+        {dato: '2024-09', verdi: 143.5}, {dato: '2024-10', verdi: 142.8}, {dato: '2024-11', verdi: 146.2}, {dato: '2024-12', verdi: 149.5},
+        {dato: '2025-01', verdi: 151.8}
+      ]
+    },
+    'norge-a': {
+      startDato: '2020-01-01',
+      data: [
+        {dato: '2020-01', verdi: 100}, {dato: '2020-02', verdi: 93.5}, {dato: '2020-03', verdi: 72.8}, {dato: '2020-04', verdi: 85.2},
+        {dato: '2020-05', verdi: 89.5}, {dato: '2020-06', verdi: 91.2}, {dato: '2020-07', verdi: 93.8}, {dato: '2020-08', verdi: 98.5},
+        {dato: '2020-09', verdi: 95.2}, {dato: '2020-10', verdi: 92.8}, {dato: '2020-11', verdi: 108.5}, {dato: '2020-12', verdi: 115.2},
+        {dato: '2021-01', verdi: 118.5}, {dato: '2021-02', verdi: 125.8}, {dato: '2021-03', verdi: 132.4}, {dato: '2021-04', verdi: 138.7},
+        {dato: '2021-05', verdi: 142.5}, {dato: '2021-06', verdi: 145.2}, {dato: '2021-07', verdi: 147.8}, {dato: '2021-08', verdi: 152.3},
+        {dato: '2021-09', verdi: 155.8}, {dato: '2021-10', verdi: 162.4}, {dato: '2021-11', verdi: 158.7}, {dato: '2021-12', verdi: 168.5},
+        {dato: '2022-01', verdi: 165.2}, {dato: '2022-02', verdi: 158.4}, {dato: '2022-03', verdi: 165.8}, {dato: '2022-04', verdi: 158.2},
+        {dato: '2022-05', verdi: 155.8}, {dato: '2022-06', verdi: 142.5}, {dato: '2022-07', verdi: 152.8}, {dato: '2022-08', verdi: 145.2},
+        {dato: '2022-09', verdi: 135.8}, {dato: '2022-10', verdi: 142.5}, {dato: '2022-11', verdi: 155.2}, {dato: '2022-12', verdi: 148.5},
+        {dato: '2023-01', verdi: 158.7}, {dato: '2023-02', verdi: 162.4}, {dato: '2023-03', verdi: 155.8}, {dato: '2023-04', verdi: 162.5},
+        {dato: '2023-05', verdi: 158.2}, {dato: '2023-06', verdi: 165.8}, {dato: '2023-07', verdi: 172.4}, {dato: '2023-08', verdi: 168.5},
+        {dato: '2023-09', verdi: 162.8}, {dato: '2023-10', verdi: 155.2}, {dato: '2023-11', verdi: 175.8}, {dato: '2023-12', verdi: 185.2},
+        {dato: '2024-01', verdi: 182.5}, {dato: '2024-02', verdi: 188.7}, {dato: '2024-03', verdi: 195.2}, {dato: '2024-04', verdi: 188.5},
+        {dato: '2024-05', verdi: 198.7}, {dato: '2024-06', verdi: 205.4}, {dato: '2024-07', verdi: 212.8}, {dato: '2024-08', verdi: 208.5},
+        {dato: '2024-09', verdi: 218.7}, {dato: '2024-10', verdi: 215.2}, {dato: '2024-11', verdi: 228.5}, {dato: '2024-12', verdi: 238.7},
+        {dato: '2025-01', verdi: 242.5}
+      ]
+    },
+    'energy-a': {
+      startDato: '2020-03-23',
+      data: [
+        {dato: '2020-03', verdi: 100}, {dato: '2020-04', verdi: 112.5}, {dato: '2020-05', verdi: 118.2}, {dato: '2020-06', verdi: 115.8},
+        {dato: '2020-07', verdi: 108.5}, {dato: '2020-08', verdi: 102.8}, {dato: '2020-09', verdi: 95.2}, {dato: '2020-10', verdi: 88.5},
+        {dato: '2020-11', verdi: 115.8}, {dato: '2020-12', verdi: 122.4},
+        {dato: '2021-01', verdi: 128.5}, {dato: '2021-02', verdi: 142.8}, {dato: '2021-03', verdi: 138.5}, {dato: '2021-04', verdi: 135.2},
+        {dato: '2021-05', verdi: 145.8}, {dato: '2021-06', verdi: 152.4}, {dato: '2021-07', verdi: 145.8}, {dato: '2021-08', verdi: 138.5},
+        {dato: '2021-09', verdi: 155.2}, {dato: '2021-10', verdi: 172.8}, {dato: '2021-11', verdi: 158.5}, {dato: '2021-12', verdi: 175.2},
+        {dato: '2022-01', verdi: 195.8}, {dato: '2022-02', verdi: 208.5}, {dato: '2022-03', verdi: 235.2}, {dato: '2022-04', verdi: 228.5},
+        {dato: '2022-05', verdi: 245.8}, {dato: '2022-06', verdi: 232.4}, {dato: '2022-07', verdi: 218.5}, {dato: '2022-08', verdi: 235.2},
+        {dato: '2022-09', verdi: 222.8}, {dato: '2022-10', verdi: 248.5}, {dato: '2022-11', verdi: 238.7}, {dato: '2022-12', verdi: 225.4},
+        {dato: '2023-01', verdi: 238.5}, {dato: '2023-02', verdi: 228.7}, {dato: '2023-03', verdi: 215.2}, {dato: '2023-04', verdi: 208.5},
+        {dato: '2023-05', verdi: 195.8}, {dato: '2023-06', verdi: 208.4}, {dato: '2023-07', verdi: 225.2}, {dato: '2023-08', verdi: 218.5},
+        {dato: '2023-09', verdi: 232.8}, {dato: '2023-10', verdi: 215.4}, {dato: '2023-11', verdi: 208.5}, {dato: '2023-12', verdi: 222.8},
+        {dato: '2024-01', verdi: 218.5}, {dato: '2024-02', verdi: 225.2}, {dato: '2024-03', verdi: 232.8}, {dato: '2024-04', verdi: 245.5},
+        {dato: '2024-05', verdi: 238.7}, {dato: '2024-06', verdi: 228.5}, {dato: '2024-07', verdi: 235.2}, {dato: '2024-08', verdi: 228.5},
+        {dato: '2024-09', verdi: 242.8}, {dato: '2024-10', verdi: 235.5}, {dato: '2024-11', verdi: 248.7}, {dato: '2024-12', verdi: 258.5},
+        {dato: '2025-01', verdi: 265.2}
+      ]
+    }
+  };
+
+  // State for historikkdata og visning
+  const [produktHistorikk, setProduktHistorikk] = useState(defaultProduktHistorikk);
+  const [historikkPeriode, setHistorikkPeriode] = useState('5y'); // 1y, 3y, 5y, max
+  const [valgteProdukterHistorikk, setValgteProdukterHistorikk] = useState(['global-core-active', 'global-edge', 'basis']);
   
   // Valgt produkt for detaljvisning
   const [valgtProduktDetalj, setValgtProduktDetalj] = useState(null);
@@ -331,61 +484,68 @@ export default function PensumPrognoseModell() {
 
   // Porteføljeallokering for Pensum-produkter
   const [pensumAllokering, setPensumAllokering] = useState([
-    { id: 'globale-aksjer', navn: 'Pensum Globale Aksjer', vekt: 40, kategori: 'fondsportefoljer' },
+    { id: 'global-core-active', navn: 'Pensum Global Core Active', vekt: 30, kategori: 'fondsportefoljer' },
+    { id: 'global-edge', navn: 'Pensum Global Edge', vekt: 20, kategori: 'fondsportefoljer' },
     { id: 'global-hoyrente', navn: 'Pensum Global Høyrente', vekt: 30, kategori: 'fondsportefoljer' },
-    { id: 'norge-a', navn: 'Pensum Norge A', vekt: 20, kategori: 'enkeltfond' },
-    { id: 'energy-a', navn: 'Pensum Global Energy A', vekt: 10, kategori: 'enkeltfond' }
+    { id: 'norge-a', navn: 'Pensum Norge A', vekt: 20, kategori: 'enkeltfond' }
   ]);
 
   // Standardporteføljer MED Basis
   const pensumStandardPortefoljerMedBasis = {
     'Defensiv': [
-      { id: 'global-hoyrente', navn: 'Pensum Global Høyrente', vekt: 50, kategori: 'fondsportefoljer' },
-      { id: 'nordisk-hoyrente', navn: 'Pensum Nordisk Høyrente', vekt: 30, kategori: 'fondsportefoljer' },
-      { id: 'basis', navn: 'Pensum Basis', vekt: 20, kategori: 'fondsportefoljer' }
+      { id: 'global-hoyrente', navn: 'Pensum Global Høyrente', vekt: 45, kategori: 'fondsportefoljer' },
+      { id: 'nordisk-hoyrente', navn: 'Pensum Nordisk Høyrente', vekt: 25, kategori: 'fondsportefoljer' },
+      { id: 'basis', navn: 'Pensum Basis', vekt: 20, kategori: 'fondsportefoljer' },
+      { id: 'global-core-active', navn: 'Pensum Global Core Active', vekt: 10, kategori: 'fondsportefoljer' }
     ],
     'Moderat': [
-      { id: 'globale-aksjer', navn: 'Pensum Globale Aksjer', vekt: 30, kategori: 'fondsportefoljer' },
-      { id: 'basis', navn: 'Pensum Basis', vekt: 30, kategori: 'fondsportefoljer' },
+      { id: 'global-core-active', navn: 'Pensum Global Core Active', vekt: 25, kategori: 'fondsportefoljer' },
+      { id: 'basis', navn: 'Pensum Basis', vekt: 25, kategori: 'fondsportefoljer' },
       { id: 'global-hoyrente', navn: 'Pensum Global Høyrente', vekt: 25, kategori: 'fondsportefoljer' },
-      { id: 'nordisk-hoyrente', navn: 'Pensum Nordisk Høyrente', vekt: 15, kategori: 'fondsportefoljer' }
+      { id: 'nordisk-hoyrente', navn: 'Pensum Nordisk Høyrente', vekt: 15, kategori: 'fondsportefoljer' },
+      { id: 'global-edge', navn: 'Pensum Global Edge', vekt: 10, kategori: 'fondsportefoljer' }
     ],
     'Dynamisk': [
-      { id: 'globale-aksjer', navn: 'Pensum Globale Aksjer', vekt: 40, kategori: 'fondsportefoljer' },
-      { id: 'basis', navn: 'Pensum Basis', vekt: 25, kategori: 'fondsportefoljer' },
+      { id: 'global-core-active', navn: 'Pensum Global Core Active', vekt: 30, kategori: 'fondsportefoljer' },
+      { id: 'global-edge', navn: 'Pensum Global Edge', vekt: 15, kategori: 'fondsportefoljer' },
+      { id: 'basis', navn: 'Pensum Basis', vekt: 20, kategori: 'fondsportefoljer' },
       { id: 'norge-a', navn: 'Pensum Norge A', vekt: 20, kategori: 'enkeltfond' },
       { id: 'global-hoyrente', navn: 'Pensum Global Høyrente', vekt: 15, kategori: 'fondsportefoljer' }
     ],
     'Offensiv': [
-      { id: 'globale-aksjer', navn: 'Pensum Globale Aksjer', vekt: 45, kategori: 'fondsportefoljer' },
+      { id: 'global-core-active', navn: 'Pensum Global Core Active', vekt: 35, kategori: 'fondsportefoljer' },
+      { id: 'global-edge', navn: 'Pensum Global Edge', vekt: 20, kategori: 'fondsportefoljer' },
       { id: 'norge-a', navn: 'Pensum Norge A', vekt: 25, kategori: 'enkeltfond' },
-      { id: 'basis', navn: 'Pensum Basis', vekt: 15, kategori: 'fondsportefoljer' },
-      { id: 'energy-a', navn: 'Pensum Global Energy A', vekt: 15, kategori: 'enkeltfond' }
+      { id: 'energy-a', navn: 'Pensum Global Energy A', vekt: 20, kategori: 'enkeltfond' }
     ]
   };
 
   // Standardporteføljer UTEN Basis
   const pensumStandardPortefoljerUtenBasis = {
     'Defensiv': [
-      { id: 'global-hoyrente', navn: 'Pensum Global Høyrente', vekt: 55, kategori: 'fondsportefoljer' },
-      { id: 'nordisk-hoyrente', navn: 'Pensum Nordisk Høyrente', vekt: 35, kategori: 'fondsportefoljer' },
-      { id: 'globale-aksjer', navn: 'Pensum Globale Aksjer', vekt: 10, kategori: 'fondsportefoljer' }
+      { id: 'global-hoyrente', navn: 'Pensum Global Høyrente', vekt: 50, kategori: 'fondsportefoljer' },
+      { id: 'nordisk-hoyrente', navn: 'Pensum Nordisk Høyrente', vekt: 30, kategori: 'fondsportefoljer' },
+      { id: 'global-core-active', navn: 'Pensum Global Core Active', vekt: 15, kategori: 'fondsportefoljer' },
+      { id: 'global-edge', navn: 'Pensum Global Edge', vekt: 5, kategori: 'fondsportefoljer' }
     ],
     'Moderat': [
-      { id: 'globale-aksjer', navn: 'Pensum Globale Aksjer', vekt: 35, kategori: 'fondsportefoljer' },
-      { id: 'global-hoyrente', navn: 'Pensum Global Høyrente', vekt: 35, kategori: 'fondsportefoljer' },
-      { id: 'norge-a', navn: 'Pensum Norge A', vekt: 20, kategori: 'enkeltfond' },
+      { id: 'global-core-active', navn: 'Pensum Global Core Active', vekt: 30, kategori: 'fondsportefoljer' },
+      { id: 'global-hoyrente', navn: 'Pensum Global Høyrente', vekt: 30, kategori: 'fondsportefoljer' },
+      { id: 'global-edge', navn: 'Pensum Global Edge', vekt: 15, kategori: 'fondsportefoljer' },
+      { id: 'norge-a', navn: 'Pensum Norge A', vekt: 15, kategori: 'enkeltfond' },
       { id: 'nordisk-hoyrente', navn: 'Pensum Nordisk Høyrente', vekt: 10, kategori: 'fondsportefoljer' }
     ],
     'Dynamisk': [
-      { id: 'globale-aksjer', navn: 'Pensum Globale Aksjer', vekt: 50, kategori: 'fondsportefoljer' },
+      { id: 'global-core-active', navn: 'Pensum Global Core Active', vekt: 35, kategori: 'fondsportefoljer' },
+      { id: 'global-edge', navn: 'Pensum Global Edge', vekt: 20, kategori: 'fondsportefoljer' },
       { id: 'norge-a', navn: 'Pensum Norge A', vekt: 25, kategori: 'enkeltfond' },
-      { id: 'global-hoyrente', navn: 'Pensum Global Høyrente', vekt: 25, kategori: 'fondsportefoljer' }
+      { id: 'global-hoyrente', navn: 'Pensum Global Høyrente', vekt: 20, kategori: 'fondsportefoljer' }
     ],
     'Offensiv': [
-      { id: 'globale-aksjer', navn: 'Pensum Globale Aksjer', vekt: 50, kategori: 'fondsportefoljer' },
-      { id: 'norge-a', navn: 'Pensum Norge A', vekt: 30, kategori: 'enkeltfond' },
-      { id: 'energy-a', navn: 'Pensum Global Energy A', vekt: 20, kategori: 'enkeltfond' }
+      { id: 'global-core-active', navn: 'Pensum Global Core Active', vekt: 40, kategori: 'fondsportefoljer' },
+      { id: 'global-edge', navn: 'Pensum Global Edge', vekt: 25, kategori: 'fondsportefoljer' },
+      { id: 'norge-a', navn: 'Pensum Norge A', vekt: 20, kategori: 'enkeltfond' },
+      { id: 'energy-a', navn: 'Pensum Global Energy A', vekt: 15, kategori: 'enkeltfond' }
     ]
   };
 
@@ -2457,6 +2617,241 @@ export default function PensumPrognoseModell() {
                   </div>
                 </div>
 
+                {/* Interaktiv historikkgraf */}
+                <div className="mb-6 bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="px-6 py-4 flex items-center justify-between" style={{ backgroundColor: PENSUM_COLORS.darkBlue }}>
+                    <h4 className="text-lg font-semibold text-white">Historisk utvikling - Pensum-løsninger</h4>
+                    <div className="flex items-center gap-2">
+                      {['1y', '3y', '5y', 'max'].map(periode => (
+                        <button
+                          key={periode}
+                          onClick={() => setHistorikkPeriode(periode)}
+                          className={"px-3 py-1 rounded text-xs font-medium transition-colors " + (historikkPeriode === periode ? "bg-white text-blue-900" : "bg-blue-800 text-white hover:bg-blue-700")}
+                        >
+                          {periode === '1y' ? '1 år' : periode === '3y' ? '3 år' : periode === '5y' ? '5 år' : 'Maks'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    {/* Produktvelger */}
+                    <div className="mb-4 flex flex-wrap gap-2">
+                      {Object.keys(produktHistorikk).map(produktId => {
+                        const produktInfo = [...pensumProdukter.enkeltfond, ...pensumProdukter.fondsportefoljer].find(p => p.id === produktId);
+                        const erValgt = valgteProdukterHistorikk.includes(produktId);
+                        const farger = {
+                          'global-core-active': '#0D2240',
+                          'global-edge': '#5B9BD5',
+                          'basis': '#D4886B',
+                          'global-hoyrente': '#16A34A',
+                          'nordisk-hoyrente': '#7C3AED',
+                          'norge-a': '#DC2626',
+                          'energy-a': '#F59E0B'
+                        };
+                        return (
+                          <button
+                            key={produktId}
+                            onClick={() => {
+                              if (erValgt) {
+                                setValgteProdukterHistorikk(prev => prev.filter(id => id !== produktId));
+                              } else {
+                                setValgteProdukterHistorikk(prev => [...prev, produktId]);
+                              }
+                            }}
+                            className={"px-3 py-1.5 rounded-lg text-xs font-medium border-2 transition-all " + (erValgt ? "text-white" : "bg-white hover:bg-gray-50")}
+                            style={{ 
+                              borderColor: farger[produktId] || '#999',
+                              backgroundColor: erValgt ? farger[produktId] : undefined,
+                              color: erValgt ? 'white' : farger[produktId]
+                            }}
+                          >
+                            {produktInfo?.navn?.replace('Pensum ', '') || produktId}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    
+                    {/* Graf */}
+                    <div className="h-80">
+                      {(() => {
+                        // Filtrer data basert på periode
+                        const now = new Date();
+                        const periodeFilter = {
+                          '1y': new Date(now.getFullYear() - 1, now.getMonth(), 1),
+                          '3y': new Date(now.getFullYear() - 3, now.getMonth(), 1),
+                          '5y': new Date(now.getFullYear() - 5, now.getMonth(), 1),
+                          'max': new Date(2015, 0, 1)
+                        };
+                        const startDato = periodeFilter[historikkPeriode];
+                        
+                        // Bygg data for grafen
+                        const chartData = [];
+                        const alleDatoer = new Set();
+                        
+                        valgteProdukterHistorikk.forEach(produktId => {
+                          const hist = produktHistorikk[produktId];
+                          if (hist && hist.data) {
+                            hist.data.forEach(d => {
+                              const dato = new Date(d.dato + '-01');
+                              if (dato >= startDato) {
+                                alleDatoer.add(d.dato);
+                              }
+                            });
+                          }
+                        });
+                        
+                        const sorterteDatoer = Array.from(alleDatoer).sort();
+                        
+                        sorterteDatoer.forEach(dato => {
+                          const punkt = { dato };
+                          valgteProdukterHistorikk.forEach(produktId => {
+                            const hist = produktHistorikk[produktId];
+                            if (hist && hist.data) {
+                              const match = hist.data.find(d => d.dato === dato);
+                              if (match) {
+                                // Reindekserer til 100 ved start av valgt periode
+                                const startMatch = hist.data.find(d => new Date(d.dato + '-01') >= startDato);
+                                const startVerdi = startMatch ? startMatch.verdi : 100;
+                                punkt[produktId] = (match.verdi / startVerdi) * 100;
+                              }
+                            }
+                          });
+                          chartData.push(punkt);
+                        });
+                        
+                        const farger = {
+                          'global-core-active': '#0D2240',
+                          'global-edge': '#5B9BD5',
+                          'basis': '#D4886B',
+                          'global-hoyrente': '#16A34A',
+                          'nordisk-hoyrente': '#7C3AED',
+                          'norge-a': '#DC2626',
+                          'energy-a': '#F59E0B'
+                        };
+                        
+                        if (chartData.length === 0 || valgteProdukterHistorikk.length === 0) {
+                          return (
+                            <div className="h-full flex items-center justify-center text-gray-500">
+                              Velg produkter for å se historisk utvikling
+                            </div>
+                          );
+                        }
+                        
+                        return (
+                          <ResponsiveContainer width="100%" height="100%">
+                            <LineChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 30 }}>
+                              <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
+                              <XAxis 
+                                dataKey="dato" 
+                                tick={{ fontSize: 10, fill: '#6B7280' }}
+                                tickFormatter={(dato) => {
+                                  const [year, month] = dato.split('-');
+                                  return month === '01' || month === '07' ? `${month}/${year.slice(2)}` : '';
+                                }}
+                                interval="preserveStartEnd"
+                              />
+                              <YAxis 
+                                tick={{ fontSize: 10, fill: '#6B7280' }}
+                                tickFormatter={(val) => val.toFixed(0)}
+                                domain={['dataMin - 5', 'dataMax + 5']}
+                              />
+                              <Tooltip 
+                                contentStyle={{ backgroundColor: 'white', border: '1px solid #E5E7EB', borderRadius: '8px', fontSize: '12px' }}
+                                labelFormatter={(dato) => {
+                                  const [year, month] = dato.split('-');
+                                  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Des'];
+                                  return `${monthNames[parseInt(month) - 1]} ${year}`;
+                                }}
+                                formatter={(value, name) => {
+                                  const produktInfo = [...pensumProdukter.enkeltfond, ...pensumProdukter.fondsportefoljer].find(p => p.id === name);
+                                  return [value.toFixed(1), produktInfo?.navn?.replace('Pensum ', '') || name];
+                                }}
+                              />
+                              <Legend 
+                                verticalAlign="bottom"
+                                height={36}
+                                formatter={(value) => {
+                                  const produktInfo = [...pensumProdukter.enkeltfond, ...pensumProdukter.fondsportefoljer].find(p => p.id === value);
+                                  return produktInfo?.navn?.replace('Pensum ', '') || value;
+                                }}
+                              />
+                              <ReferenceLine y={100} stroke="#9CA3AF" strokeDasharray="5 5" />
+                              {valgteProdukterHistorikk.map(produktId => (
+                                <Line
+                                  key={produktId}
+                                  type="monotone"
+                                  dataKey={produktId}
+                                  stroke={farger[produktId] || '#999'}
+                                  strokeWidth={2}
+                                  dot={false}
+                                  activeDot={{ r: 4 }}
+                                />
+                              ))}
+                            </LineChart>
+                          </ResponsiveContainer>
+                        );
+                      })()}
+                    </div>
+                    
+                    {/* Avkastningstabell for valgt periode */}
+                    {valgteProdukterHistorikk.length > 0 && (
+                      <div className="mt-4 grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+                        {valgteProdukterHistorikk.map(produktId => {
+                          const hist = produktHistorikk[produktId];
+                          const produktInfo = [...pensumProdukter.enkeltfond, ...pensumProdukter.fondsportefoljer].find(p => p.id === produktId);
+                          const farger = {
+                            'global-core-active': '#0D2240',
+                            'global-edge': '#5B9BD5',
+                            'basis': '#D4886B',
+                            'global-hoyrente': '#16A34A',
+                            'nordisk-hoyrente': '#7C3AED',
+                            'norge-a': '#DC2626',
+                            'energy-a': '#F59E0B'
+                          };
+                          
+                          if (!hist || !hist.data || hist.data.length < 2) return null;
+                          
+                          // Beregn avkastning for valgt periode
+                          const now = new Date();
+                          const periodeFilter = {
+                            '1y': new Date(now.getFullYear() - 1, now.getMonth(), 1),
+                            '3y': new Date(now.getFullYear() - 3, now.getMonth(), 1),
+                            '5y': new Date(now.getFullYear() - 5, now.getMonth(), 1),
+                            'max': new Date(2015, 0, 1)
+                          };
+                          const startDato = periodeFilter[historikkPeriode];
+                          
+                          const startMatch = hist.data.find(d => new Date(d.dato + '-01') >= startDato);
+                          const sluttVerdi = hist.data[hist.data.length - 1].verdi;
+                          const startVerdi = startMatch ? startMatch.verdi : hist.data[0].verdi;
+                          const avkastning = ((sluttVerdi / startVerdi) - 1) * 100;
+                          
+                          return (
+                            <div key={produktId} className="p-3 rounded-lg border-2" style={{ borderColor: farger[produktId] }}>
+                              <p className="text-xs font-medium truncate" style={{ color: farger[produktId] }}>
+                                {produktInfo?.navn?.replace('Pensum ', '')}
+                              </p>
+                              <p className={"text-lg font-bold " + (avkastning >= 0 ? 'text-green-600' : 'text-red-600')}>
+                                {avkastning >= 0 ? '+' : ''}{avkastning.toFixed(1)}%
+                              </p>
+                              <p className="text-xs text-gray-500">
+                                {historikkPeriode === '1y' ? 'Siste 1 år' : historikkPeriode === '3y' ? 'Siste 3 år' : historikkPeriode === '5y' ? 'Siste 5 år' : 'Total'}
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                    
+                    {/* Disclaimer */}
+                    <div className="mt-4 text-xs text-gray-500 p-3 bg-gray-50 rounded-lg">
+                      <strong>Viktig informasjon om avkastning:</strong> Historikk er indeksert til 100 ved start av valgt periode. 
+                      For flere produkter er historikk før oppstart estimert - se produktdetaljer for mer informasjon. 
+                      Historisk avkastning er ingen garanti for fremtidig avkastning.
+                    </div>
+                  </div>
+                </div>
+
                 {/* Tabell med alle produkter */}
                 <div className="overflow-x-auto">
                   <table className="w-full text-sm">
@@ -2516,7 +2911,7 @@ export default function PensumPrognoseModell() {
                               <td className="py-2 px-3 text-right text-gray-400">—</td>
                               <td className="py-2 px-3 text-right text-gray-400">—</td>
                               <td className="py-2 px-3 text-right text-gray-400">—</td>
-                              <td className="py-2 px-3 text-right text-green-600">{p.forventetAvkastning.toFixed(1)}%</td>
+                              <td className="py-2 px-3 text-right text-gray-400">—</td>
                               <td className="py-2 px-3 text-right text-gray-400">—</td>
                             </tr>
                           ))}
