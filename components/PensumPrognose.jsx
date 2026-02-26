@@ -2075,7 +2075,7 @@ export default function PensumPrognoseModell() {
                           const file = e.target.files[0];
                           if (!file) return;
                           try {
-                            const XLSX = await import('https://cdn.sheetjs.com/xlsx-0.20.1/package/xlsx.mjs');
+                            const XLSX = await import('xlsx');
                             const data = await file.arrayBuffer();
                             const workbook = XLSX.read(data);
                             const sheet = workbook.Sheets[workbook.SheetNames[0]];
