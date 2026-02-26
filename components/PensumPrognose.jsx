@@ -123,7 +123,7 @@ export default function PensumPrognoseModell() {
   const [visKundeliste, setVisKundeliste] = useState(false);
   const [lagringsStatus, setLagringsStatus] = useState('');
 
-  // Pensum Løsninger - fond og mandater med historisk avkastning
+  // Pensum Løsninger - fond og mandater med historisk avkastning og eksponeringsdata
   // aktivatype: 'aksje', 'rente' eller 'alternativ'
   // likviditet: 'likvid' eller 'illikvid'
   const defaultPensumProdukter = {
@@ -135,6 +135,8 @@ export default function PensumPrognoseModell() {
     ],
     fondsportefoljer: [
       { id: 'globale-aksjer', navn: 'Pensum Globale Aksjer', aktivatype: 'aksje', likviditet: 'likvid', aar2024: 18.3, aar2023: 17.5, aar2022: -3.7, aar2021: 16.3, aar2020: 14.8, aarlig3ar: 13.6, risiko3ar: 10.7 },
+      { id: 'global-core-active', navn: 'Pensum Global Core Active', aktivatype: 'aksje', likviditet: 'likvid', aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
+      { id: 'global-edge', navn: 'Pensum Global Edge', aktivatype: 'aksje', likviditet: 'likvid', aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
       { id: 'basis', navn: 'Pensum Basis', aktivatype: 'blandet', likviditet: 'likvid', aar2024: 6.2, aar2023: 13.1, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null },
       { id: 'global-hoyrente', navn: 'Pensum Global Høyrente', aktivatype: 'rente', likviditet: 'likvid', aar2024: 6.5, aar2023: 7.9, aar2022: -5.1, aar2021: 5.3, aar2020: 3.0, aarlig3ar: 6.9, risiko3ar: 2.3 },
       { id: 'nordisk-hoyrente', navn: 'Pensum Nordisk Høyrente', aktivatype: 'rente', likviditet: 'likvid', aar2024: 6.5, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: null, risiko3ar: null }
@@ -145,6 +147,142 @@ export default function PensumPrognoseModell() {
       { id: 'unoterte-aksjer', navn: 'Unoterte aksjer', aktivatype: 'alternativ', likviditet: 'illikvid', forventetAvkastning: 12.0, aar2024: null, aar2023: null, aar2022: null, aar2021: null, aar2020: null, aarlig3ar: 12.0, risiko3ar: null }
     ]
   };
+  
+  // Eksponeringsdata for Pensum-produkter (underliggende, regioner, sektorer, stil)
+  const [produktEksponering, setProduktEksponering] = useState({
+    'global-core-active': {
+      underliggende: [
+        {navn: 'AB Select US Equity S1 USD', vekt: 19.9},
+        {navn: 'Capital Group InvCoAmer (LUX) A4', vekt: 19.8},
+        {navn: 'BGF European Value D2', vekt: 10.3},
+        {navn: 'Guinness Global Equity Income Y EUR Acc', vekt: 10.2},
+        {navn: 'Acadian Global Equity UCITS A EUR', vekt: 10.1},
+        {navn: 'Capital Group New Pers (LUX) ZL', vekt: 10.0},
+        {navn: 'Acadian Emerg Mkts Eq II C USD Ins Acc', vekt: 8.6},
+        {navn: 'DNB Teknologi A', vekt: 5.8},
+        {navn: 'JPM Japan Strategic Value C (acc) JPY', vekt: 5.3}
+      ],
+      regioner: [
+        {navn: 'United States', vekt: 59.8}, {navn: 'Japan', vekt: 6.3}, {navn: 'United Kingdom', vekt: 4.6},
+        {navn: 'France', vekt: 3.6}, {navn: 'Taiwan', vekt: 3.3}, {navn: 'Other', vekt: 22.4}
+      ],
+      sektorer: [
+        {navn: 'Technology', vekt: 26.9}, {navn: 'Financial Services', vekt: 17.3}, {navn: 'Industrials', vekt: 13.5},
+        {navn: 'Healthcare', vekt: 10.8}, {navn: 'Communication Services', vekt: 9.8}, {navn: 'Consumer Cyclical', vekt: 8.6},
+        {navn: 'Other', vekt: 13.1}
+      ],
+      stil: [
+        {navn: 'Large Value', vekt: 23.7}, {navn: 'Large Core', vekt: 42.1}, {navn: 'Large Growth', vekt: 17.8},
+        {navn: 'Mid Cap', vekt: 13.9}, {navn: 'Small Cap', vekt: 2.5}
+      ],
+      disclaimer: 'Oppstart 01.01.2026. Historikk er estimert med den samme allokeringen som i oppstartsporteføljene bakover i tid.'
+    },
+    'global-edge': {
+      underliggende: [
+        {navn: 'Janus Henderson Hrzn Glb SC IU2 USD', vekt: 16.8},
+        {navn: 'Capital Group InvCoAmer (LUX) Z', vekt: 13.3},
+        {navn: 'DNB Teknologi A', vekt: 12.2},
+        {navn: 'Acadian Emerg Mkts Eq II C USD Ins Acc', vekt: 10.1},
+        {navn: 'BGF European Value D2', vekt: 8.4},
+        {navn: 'ORIGO SELEQT A', vekt: 7.6},
+        {navn: 'Arctic Aurora LifeScience I', vekt: 7.5},
+        {navn: 'Bakersteel Glb Fds SICAV- Elctm I USD', vekt: 7.1},
+        {navn: 'Granahan US Focused Growth A USD Acc', vekt: 6.4},
+        {navn: 'Guinness Sustainable Energy Y USD Acc', vekt: 5.5},
+        {navn: 'FIRST Impact', vekt: 5.2}
+      ],
+      regioner: [
+        {navn: 'United States', vekt: 46.8}, {navn: 'Sweden', vekt: 7.1}, {navn: 'United Kingdom', vekt: 4.9},
+        {navn: 'China', vekt: 4.3}, {navn: 'Canada', vekt: 4.0}, {navn: 'Other', vekt: 32.9}
+      ],
+      sektorer: [
+        {navn: 'Technology', vekt: 22.8}, {navn: 'Industrials', vekt: 16.0}, {navn: 'Healthcare', vekt: 14.6},
+        {navn: 'Financial Services', vekt: 11.8}, {navn: 'Basic Materials', vekt: 9.7}, {navn: 'Other', vekt: 25.1}
+      ],
+      stil: [
+        {navn: 'Large Value', vekt: 11.1}, {navn: 'Large Core', vekt: 24.7}, {navn: 'Large Growth', vekt: 12.8},
+        {navn: 'Mid Cap', vekt: 22.1}, {navn: 'Small Cap', vekt: 29.3}
+      ],
+      disclaimer: 'Oppstart 01.01.2026. Historikk er estimert med den samme allokeringen som i oppstartsporteføljene bakover i tid.'
+    },
+    'basis': {
+      underliggende: [
+        {navn: 'Arctic Nordic Corporate Bond Class D', vekt: 21.2},
+        {navn: 'Arctic Return Class I', vekt: 17.5},
+        {navn: 'Acadian Global Equity UCITS A EUR', vekt: 11.5},
+        {navn: 'Guinness Global Equity Income Y EUR Acc', vekt: 10.8},
+        {navn: 'KLP Obligasjon Global S', vekt: 10.1},
+        {navn: 'Janus Henderson Hrzn Glb SC IU2 USD', vekt: 5.9},
+        {navn: 'Acadian Emerg Mkts Eq II C USD Ins Acc', vekt: 4.6},
+        {navn: 'ORIGO SELEQT A', vekt: 4.4},
+        {navn: 'BGF European Value D2', vekt: 4.4},
+        {navn: 'Elopak ASA', vekt: 3.5},
+        {navn: 'Public Property Invest ASA', vekt: 3.1},
+        {navn: 'Sentia ASA Registered Shares', vekt: 3.0}
+      ],
+      disclaimer: 'Avkastning før oppstart 12. september 2023 er estimert med en lignende portefølje med 50% rentefond og 50% aksjer.'
+    },
+    'global-hoyrente': {
+      underliggende: [
+        {navn: 'Arctic Nordic Corporate Bond Class D', vekt: 25.3},
+        {navn: 'Barings Global High Yield Bond I NOK Acc', vekt: 23.2},
+        {navn: 'BlueBay Global High Yield Bd I NOK', vekt: 20.2},
+        {navn: 'Storm Bond ICN NOK', vekt: 16.2},
+        {navn: 'KLP Obligasjon Global S', vekt: 15.2}
+      ]
+    },
+    'nordisk-hoyrente': {
+      underliggende: [
+        {navn: 'Storm Bond ICN NOK', vekt: 33.7},
+        {navn: 'Arctic Nordic Corporate Bond Class D', vekt: 33.7},
+        {navn: 'Alfred Berg Nordic HY C (NOK)', vekt: 32.6}
+      ],
+      disclaimer: 'Oppstart februar 2024. Utvikling før dette er estimert med underliggende fonds utvikling før oppstart.'
+    },
+    'energy-a': {
+      underliggende: [
+        {navn: 'Var Energi ASA', vekt: 5.7}, {navn: 'DNO ASA', vekt: 5.7}, {navn: 'Aker BP ASA', vekt: 5.6},
+        {navn: 'Valero Energy Corp', vekt: 5.1}, {navn: 'Exxon Mobil Corp', vekt: 5.1}, {navn: 'Equinor ASA', vekt: 4.5},
+        {navn: 'Chevron Corp', vekt: 4.3}, {navn: 'International Petroleum Corp', vekt: 4.3},
+        {navn: 'Frontline PLC', vekt: 4.1}, {navn: 'DOF Group ASA', vekt: 4.1}, {navn: 'Subsea 7 SA', vekt: 4.0}
+      ],
+      disclaimer: 'Avkastning før oppstart desember 2022 er estimert med et lignende diskresjonært mandat forvaltet av samme forvalter.'
+    },
+    'banking-d': {
+      underliggende: [
+        {navn: 'DNB Bank ASA', vekt: 15.6}, {navn: 'Nordea Bank Abp', vekt: 13.6},
+        {navn: 'SpareBank 1 SMN Depository Receipts', vekt: 12.2}, {navn: 'Sparebank 1 Sorost-Norge', vekt: 10.3},
+        {navn: 'Sparebanken Norge Depository Receipts', vekt: 8.9}, {navn: 'Danske Bank AS', vekt: 4.7},
+        {navn: 'Swedbank AB Class A', vekt: 4.4}
+      ],
+      disclaimer: 'Oppstart 29. januar 2025. Utvikling før dette er estimert med det lignende mandatet Pensum Sparebank+.'
+    },
+    'norge-a': {
+      underliggende: [
+        {navn: 'DNB Bank ASA', vekt: 7.0}, {navn: 'Protector Forsikring ASA', vekt: 6.8},
+        {navn: 'Storebrand ASA', vekt: 5.1}, {navn: 'Equinor ASA', vekt: 4.2},
+        {navn: 'Aker ASA Class A', vekt: 4.1}, {navn: 'DOF Group ASA', vekt: 4.0},
+        {navn: 'Mowi ASA', vekt: 4.0}, {navn: 'Public Property Invest ASA', vekt: 3.5},
+        {navn: 'SpareBank 1 Sor Norge ASA', vekt: 3.5}
+      ],
+      disclaimer: 'Oppstart 27. november 2023. Utvikling før dette er estimert med lignende porteføljer.'
+    },
+    'financial-d': {
+      underliggende: [
+        {navn: 'IuteCredit Finance S.a r.l.', vekt: 26.5}, {navn: 'Stichting AK Rabobank Certificaten', vekt: 18.3},
+        {navn: 'Eleving Group SA', vekt: 14.1}, {navn: 'Worldline SA', vekt: 10.3},
+        {navn: 'Axactor ASA', vekt: 9.9}, {navn: 'Multitude PLC', vekt: 8.0},
+        {navn: 'Sherwood Financing PLC', vekt: 7.8}, {navn: 'Landsbankinn hf.', vekt: 5.2}
+      ],
+      disclaimer: 'Oppstart 05.04.2025. Utvikling før dette er estimert med indeksen Bloomberg Global High Yield, valutasikret til NOK. NB: Allokeringen er foreløpig ikke korrekt.'
+    }
+  });
+  
+  // Historikkdata for produkter (lastes fra Admin)
+  const [produktHistorikk, setProduktHistorikk] = useState({});
+  
+  // Valgt produkt for detaljvisning
+  const [valgtProduktDetalj, setValgtProduktDetalj] = useState(null);
   
   const [pensumProdukter, setPensumProdukter] = useState(defaultPensumProdukter);
   
@@ -1400,6 +1538,129 @@ export default function PensumPrognoseModell() {
         </div>
       )}
       
+      {/* Produktdetalj Modal */}
+      {valgtProduktDetalj && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-4 flex items-center justify-between" style={{ backgroundColor: PENSUM_COLORS.darkBlue }}>
+              <h3 className="text-lg font-semibold text-white">{valgtProduktDetalj.navn}</h3>
+              <button onClick={() => setValgtProduktDetalj(null)} className="text-white hover:text-gray-200">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto">
+              {(() => {
+                const eksponering = produktEksponering[valgtProduktDetalj.id];
+                if (!eksponering) {
+                  return <p className="text-gray-500 italic">Ingen eksponeringsdata tilgjengelig for dette produktet.</p>;
+                }
+                return (
+                  <div className="space-y-6">
+                    {/* Disclaimer */}
+                    {eksponering.disclaimer && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                        <div className="flex items-start gap-2">
+                          <svg className="w-5 h-5 text-amber-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                          <p className="text-sm text-amber-800">{eksponering.disclaimer}</p>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Underliggende investeringer */}
+                    {eksponering.underliggende && eksponering.underliggende.length > 0 && (
+                      <div>
+                        <h4 className="font-semibold mb-3" style={{ color: PENSUM_COLORS.darkBlue }}>Underliggende investeringer</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          {eksponering.underliggende.map((inv, idx) => (
+                            <div key={idx} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                              <span className="text-sm truncate mr-2">{inv.navn}</span>
+                              <span className="text-sm font-medium whitespace-nowrap" style={{ color: PENSUM_COLORS.darkBlue }}>{inv.vekt}%</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Regioner og Sektorer side om side */}
+                    {(eksponering.regioner || eksponering.sektorer) && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Regioner */}
+                        {eksponering.regioner && eksponering.regioner.length > 0 && (
+                          <div>
+                            <h4 className="font-semibold mb-3" style={{ color: PENSUM_COLORS.darkBlue }}>Regioner</h4>
+                            <div className="space-y-1">
+                              {eksponering.regioner.map((region, idx) => (
+                                <div key={idx} className="flex items-center gap-2">
+                                  <div className="flex-grow bg-gray-100 rounded-full h-4 overflow-hidden">
+                                    <div className="h-full rounded-full" style={{ width: `${region.vekt}%`, backgroundColor: PENSUM_COLORS.lightBlue }}></div>
+                                  </div>
+                                  <span className="text-xs w-24 truncate">{region.navn}</span>
+                                  <span className="text-xs font-medium w-10 text-right">{region.vekt}%</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Sektorer */}
+                        {eksponering.sektorer && eksponering.sektorer.length > 0 && (
+                          <div>
+                            <h4 className="font-semibold mb-3" style={{ color: PENSUM_COLORS.darkBlue }}>Sektorer</h4>
+                            <div className="space-y-1">
+                              {eksponering.sektorer.map((sektor, idx) => (
+                                <div key={idx} className="flex items-center gap-2">
+                                  <div className="flex-grow bg-gray-100 rounded-full h-4 overflow-hidden">
+                                    <div className="h-full rounded-full" style={{ width: `${sektor.vekt}%`, backgroundColor: PENSUM_COLORS.salmon }}></div>
+                                  </div>
+                                  <span className="text-xs w-32 truncate">{sektor.navn}</span>
+                                  <span className="text-xs font-medium w-10 text-right">{sektor.vekt}%</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    
+                    {/* Stil */}
+                    {eksponering.stil && eksponering.stil.length > 0 && (
+                      <div>
+                        <h4 className="font-semibold mb-3" style={{ color: PENSUM_COLORS.darkBlue }}>Investeringsstil</h4>
+                        <div className="flex flex-wrap gap-2">
+                          {eksponering.stil.map((stil, idx) => (
+                            <div key={idx} className="px-3 py-2 bg-gray-100 rounded-lg">
+                              <span className="text-xs text-gray-600">{stil.navn}</span>
+                              <span className="ml-2 text-sm font-medium" style={{ color: PENSUM_COLORS.darkBlue }}>{stil.vekt}%</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Avkastningshistorikk */}
+                    <div>
+                      <h4 className="font-semibold mb-3" style={{ color: PENSUM_COLORS.darkBlue }}>Historisk avkastning</h4>
+                      <div className="flex flex-wrap gap-4">
+                        {valgtProduktDetalj.aar2024 !== null && <div className="text-center p-3 bg-gray-50 rounded-lg"><span className="text-xs text-gray-500 block">2024</span><span className={"text-lg font-bold " + (valgtProduktDetalj.aar2024 >= 0 ? "text-green-600" : "text-red-600")}>{valgtProduktDetalj.aar2024 > 0 ? '+' : ''}{valgtProduktDetalj.aar2024}%</span></div>}
+                        {valgtProduktDetalj.aar2023 !== null && <div className="text-center p-3 bg-gray-50 rounded-lg"><span className="text-xs text-gray-500 block">2023</span><span className={"text-lg font-bold " + (valgtProduktDetalj.aar2023 >= 0 ? "text-green-600" : "text-red-600")}>{valgtProduktDetalj.aar2023 > 0 ? '+' : ''}{valgtProduktDetalj.aar2023}%</span></div>}
+                        {valgtProduktDetalj.aar2022 !== null && <div className="text-center p-3 bg-gray-50 rounded-lg"><span className="text-xs text-gray-500 block">2022</span><span className={"text-lg font-bold " + (valgtProduktDetalj.aar2022 >= 0 ? "text-green-600" : "text-red-600")}>{valgtProduktDetalj.aar2022 > 0 ? '+' : ''}{valgtProduktDetalj.aar2022}%</span></div>}
+                        {valgtProduktDetalj.aarlig3ar !== null && <div className="text-center p-3 bg-blue-50 rounded-lg border border-blue-200"><span className="text-xs text-blue-600 block">Årlig 3 år</span><span className={"text-lg font-bold " + (valgtProduktDetalj.aarlig3ar >= 0 ? "text-green-600" : "text-red-600")}>{valgtProduktDetalj.aarlig3ar > 0 ? '+' : ''}{valgtProduktDetalj.aarlig3ar}%</span></div>}
+                        {valgtProduktDetalj.risiko3ar !== null && <div className="text-center p-3 bg-gray-50 rounded-lg"><span className="text-xs text-gray-500 block">Risiko 3 år</span><span className="text-lg font-bold text-gray-700">{valgtProduktDetalj.risiko3ar}%</span></div>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+            <div className="px-6 py-4 border-t border-gray-200 bg-gray-50">
+              <button onClick={() => setValgtProduktDetalj(null)} className="w-full py-2.5 px-4 rounded-lg text-sm font-medium text-white" style={{ backgroundColor: PENSUM_COLORS.darkBlue }}>
+                Lukk
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <header className="bg-white shadow-sm no-print">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <img src={PENSUM_LOGO} alt="Pensum Asset Management" className="h-20 md:h-24" />
@@ -2010,6 +2271,7 @@ export default function PensumPrognoseModell() {
                         const alleProdukt = [...pensumProdukter.enkeltfond, ...pensumProdukter.fondsportefoljer, ...pensumProdukter.alternative];
                         const produktInfo = alleProdukt.find(p => p.id === produkt.id);
                         const erIllikvid = produktInfo?.likviditet === 'illikvid';
+                        const harEksponering = produktEksponering[produkt.id];
                         return (
                           <div key={produkt.id} className={"flex items-center gap-3 p-3 rounded-lg " + (erIllikvid ? "bg-amber-50 border border-amber-200" : "bg-gray-50")}>
                             <button onClick={() => fjernPensumProdukt(produkt.id)} className="text-red-500 hover:text-red-700">
@@ -2017,7 +2279,16 @@ export default function PensumPrognoseModell() {
                             </button>
                             <div className="flex-1">
                               <p className="font-medium text-sm flex items-center gap-2" style={{ color: PENSUM_COLORS.darkBlue }}>
-                                {produkt.navn}
+                                <button 
+                                  onClick={() => setValgtProduktDetalj(produktInfo)} 
+                                  className={"hover:underline " + (harEksponering ? "cursor-pointer" : "")}
+                                  title={harEksponering ? "Klikk for å se detaljer" : ""}
+                                >
+                                  {produkt.navn}
+                                </button>
+                                {harEksponering && (
+                                  <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                )}
                                 {erIllikvid && <span className="text-xs px-1.5 py-0.5 rounded bg-amber-200 text-amber-800">Illikvid</span>}
                               </p>
                               <p className="text-xs text-gray-500">{produkt.kategori === 'enkeltfond' ? 'Enkeltfond' : produkt.kategori === 'alternative' ? 'Alternativ investering' : 'Fondsportefølje'}</p>
