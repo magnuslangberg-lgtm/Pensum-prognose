@@ -356,22 +356,6 @@ export default function PensumPrognoseModell() {
     return totalVekt > 0 ? vektetSum / totalVekt : 0;
   }, [pensumAllokering, pensumProdukter]);
 
-  // Beregn prognose for Pensum-portefølje
-  const pensumPrognose = useMemo(() => {
-    const avkastning = pensumForventetAvkastning / 100;
-    const prognose = [];
-    let verdi = totalKapital;
-    
-    for (let i = 0; i <= horisont; i++) {
-      prognose.push({
-        year: new Date().getFullYear() + i,
-        verdi: Math.round(verdi)
-      });
-      verdi = verdi * (1 + avkastning);
-    }
-    
-    return prognose;
-  }, [pensumForventetAvkastning, totalKapital, horisont]);
   
   const valgtLosning = null; // Fjernet gammel state
 
@@ -562,6 +546,23 @@ export default function PensumPrognoseModell() {
   const illikvideTotal = peTotal + eiendomTotal;
   const totalKapital = likvideTotal + illikvideTotal;
   const nettoKontantstrom = innskudd - uttak;
+
+  // Beregn prognose for Pensum-portefølje (må være etter totalKapital er definert)
+  const pensumPrognose = useMemo(() => {
+    const avkastning = pensumForventetAvkastning / 100;
+    const prognose = [];
+    let verdi = totalKapital;
+    
+    for (let i = 0; i <= horisont; i++) {
+      prognose.push({
+        year: new Date().getFullYear() + i,
+        verdi: Math.round(verdi)
+      });
+      verdi = verdi * (1 + avkastning);
+    }
+    
+    return prognose;
+  }, [pensumForventetAvkastning, totalKapital, horisont]);
 
   const oppdaterSammenligningProfil = useCallback((nyProfil) => {
     setSammenligningProfil(nyProfil);
