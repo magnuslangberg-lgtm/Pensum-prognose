@@ -66,6 +66,18 @@ export default function PensumPrognoseModell() {
   const [expandedCategories, setExpandedCategories] = useState({ aksjer: false, renter: false });
   const [expandedKundeKategorier, setExpandedKundeKategorier] = useState({ likvide: true, illikvide: true, pe: false, eiendom: false });
 
+  // Bruker-autentisering
+  const [bruker, setBruker] = useState(null); // { epost, pin, navn }
+  const [visLoginModal, setVisLoginModal] = useState(false);
+  const [visRegistrerModal, setVisRegistrerModal] = useState(false);
+  const [loginEpost, setLoginEpost] = useState('');
+  const [loginPin, setLoginPin] = useState('');
+  const [registrerEpost, setRegistrerEpost] = useState('');
+  const [registrerPin, setRegistrerPin] = useState('');
+  const [registrerNavn, setRegistrerNavn] = useState('');
+  const [authFeilmelding, setAuthFeilmelding] = useState('');
+  const [ventPaaRegistrering, setVentPaaRegistrering] = useState(false); // Venter på registrering før lagring
+
   const [kundeNavn, setKundeNavn] = useState('');
   const [risikoprofil, setRisikoprofil] = useState('Moderat');
   const [horisont, setHorisont] = useState(10);
@@ -89,7 +101,8 @@ export default function PensumPrognoseModell() {
   
   // Allokering & Prognose - investert beløp og alternative investeringer
   const [investertBelop, setInvestertBelop] = useState(null); // null = bruk totalKapital fra kundeinformasjon
-  const [visAlternativeAllokering, setVisAlternativeAllokering] = useState(false);
+  // visAlternativeAllokering: null = auto (basert på om kunden har alt.inv.), true/false = manuelt satt
+  const [visAlternativeAllokering, setVisAlternativeAllokering] = useState(null);
   
   const [scenarioParams, setScenarioParams] = useState({ pessimistisk: -2, optimistisk: 12 });
   const [sammenligningProfil, setSammenligningProfil] = useState('Offensiv');
@@ -430,17 +443,174 @@ export default function PensumPrognoseModell() {
     setActiveTab('input');
   }, []);
 
-  // Lagre kunde
-  const lagreKunde = useCallback(async () => {
-    if (!radgiver) {
-      alert('Vennligst fyll inn rådgivernavn først');
+  // ============ BRUKER-AUTENTISERING ============
+  
+  // Last bruker fra storage ved oppstart
+  useEffect(() => {
+    const lastBruker = async () => {
+      try {
+        if (window.storage && window.storage.get) {
+          const result = await window.storage.get('pensum_aktiv_bruker');
+          if (result && result.value) {
+            const brukerData = JSON.parse(result.value);
+            setBruker(brukerData);
+            if (brukerData.navn) setRadgiver(brukerData.navn);
+          }
+        }
+      } catch (e) {
+        console.log('Kunne ikke laste bruker:', e);
+      }
+    };
+    lastBruker();
+  }, []);
+
+  // Registrer ny bruker
+  const registrerBruker = useCallback(async () => {
+    setAuthFeilmelding('');
+    
+    if (!registrerEpost || !registrerEpost.includes('@')) {
+      setAuthFeilmelding('Vennligst oppgi en gyldig e-postadresse');
       return;
     }
+    if (!registrerPin || registrerPin.length < 4) {
+      setAuthFeilmelding('PIN må være minst 4 tegn');
+      return;
+    }
+    if (!registrerNavn) {
+      setAuthFeilmelding('Vennligst oppgi ditt navn');
+      return;
+    }
+
+    try {
+      // Sjekk om e-post allerede er registrert
+      const brukereKey = 'pensum_brukere';
+      let brukere = {};
+      
+      if (window.storage && window.storage.get) {
+        const result = await window.storage.get(brukereKey);
+        if (result && result.value) {
+          brukere = JSON.parse(result.value);
+        }
+      }
+
+      const epostNormalisert = registrerEpost.toLowerCase().trim();
+      if (brukere[epostNormalisert]) {
+        setAuthFeilmelding('Denne e-postadressen er allerede registrert');
+        return;
+      }
+
+      // Lagre ny bruker
+      const nyBruker = {
+        epost: epostNormalisert,
+        pin: registrerPin,
+        navn: registrerNavn,
+        opprettet: new Date().toISOString()
+      };
+      
+      brukere[epostNormalisert] = nyBruker;
+      
+      if (window.storage && window.storage.set) {
+        await window.storage.set(brukereKey, JSON.stringify(brukere));
+        await window.storage.set('pensum_aktiv_bruker', JSON.stringify(nyBruker));
+      }
+
+      setBruker(nyBruker);
+      setRadgiver(nyBruker.navn);
+      setVisRegistrerModal(false);
+      setRegistrerEpost('');
+      setRegistrerPin('');
+      setRegistrerNavn('');
+      
+      // Hvis vi ventet på registrering for å lagre, gjør det nå
+      if (ventPaaRegistrering) {
+        setVentPaaRegistrering(false);
+        setTimeout(() => lagreKundeEtterAuth(), 100);
+      }
+    } catch (e) {
+      setAuthFeilmelding('Kunne ikke registrere bruker. Prøv igjen.');
+      console.error('Registreringsfeil:', e);
+    }
+  }, [registrerEpost, registrerPin, registrerNavn, ventPaaRegistrering]);
+
+  // Logg inn bruker
+  const loggInnBruker = useCallback(async () => {
+    setAuthFeilmelding('');
+    
+    if (!loginEpost || !loginPin) {
+      setAuthFeilmelding('Vennligst fyll inn e-post og PIN');
+      return;
+    }
+
+    try {
+      const brukereKey = 'pensum_brukere';
+      let brukere = {};
+      
+      if (window.storage && window.storage.get) {
+        const result = await window.storage.get(brukereKey);
+        if (result && result.value) {
+          brukere = JSON.parse(result.value);
+        }
+      }
+
+      const epostNormalisert = loginEpost.toLowerCase().trim();
+      const brukerData = brukere[epostNormalisert];
+      
+      if (!brukerData) {
+        setAuthFeilmelding('Fant ingen bruker med denne e-postadressen');
+        return;
+      }
+      
+      if (brukerData.pin !== loginPin) {
+        setAuthFeilmelding('Feil PIN-kode');
+        return;
+      }
+
+      // Lagre aktiv bruker
+      if (window.storage && window.storage.set) {
+        await window.storage.set('pensum_aktiv_bruker', JSON.stringify(brukerData));
+      }
+
+      setBruker(brukerData);
+      setRadgiver(brukerData.navn);
+      setVisLoginModal(false);
+      setLoginEpost('');
+      setLoginPin('');
+      
+      // Hvis vi ventet på innlogging for å lagre, gjør det nå
+      if (ventPaaRegistrering) {
+        setVentPaaRegistrering(false);
+        setTimeout(() => lagreKundeEtterAuth(), 100);
+      }
+    } catch (e) {
+      setAuthFeilmelding('Kunne ikke logge inn. Prøv igjen.');
+      console.error('Innloggingsfeil:', e);
+    }
+  }, [loginEpost, loginPin, ventPaaRegistrering]);
+
+  // Logg ut bruker
+  const loggUtBruker = useCallback(async () => {
+    try {
+      if (window.storage && window.storage.delete) {
+        await window.storage.delete('pensum_aktiv_bruker');
+      }
+    } catch (e) {
+      console.log('Kunne ikke slette bruker fra storage:', e);
+    }
+    setBruker(null);
+    setRadgiver('');
+  }, []);
+
+  // Intern lagringsfunksjon (etter autentisering)
+  const lagreKundeEtterAuth = useCallback(async () => {
     if (!kundeNavn) {
       alert('Vennligst fyll inn kundenavn først');
       return;
     }
-    const storageKey = 'pensum_kunder_' + radgiver.toLowerCase().replace(/\s+/g, '_');
+    
+    const brukerNavn = bruker?.navn || radgiver;
+    if (!brukerNavn) return;
+    
+    const storageKey = 'pensum_kunder_' + brukerNavn.toLowerCase().replace(/\s+/g, '_');
     const kundeData = getKundeData();
     
     let oppdatertListe;
@@ -463,12 +633,29 @@ export default function PensumPrognoseModell() {
         throw new Error('Storage not available');
       }
     } catch (e) {
-      // Fallback: tilby nedlasting av fil
       setLagredeKunder(oppdatertListe);
       setAktivKundeId(kundeData.id);
-      alert('Automatisk lagring er ikke tilgjengelig i denne nettleseren. Bruk "Eksporter" for å lagre kunden som fil.');
+      alert('Automatisk lagring er ikke tilgjengelig. Bruk "Eksporter" for å lagre kunden som fil.');
     }
-  }, [radgiver, kundeNavn, getKundeData, lagredeKunder]);
+  }, [bruker, radgiver, kundeNavn, getKundeData, lagredeKunder]);
+
+  // Lagre kunde (hovedfunksjon)
+  const lagreKunde = useCallback(async () => {
+    if (!kundeNavn) {
+      alert('Vennligst fyll inn kundenavn først');
+      return;
+    }
+    
+    // Hvis bruker ikke er innlogget, vis valg
+    if (!bruker) {
+      setVentPaaRegistrering(true);
+      setVisLoginModal(true);
+      return;
+    }
+    
+    // Bruker er innlogget, lagre direkte
+    await lagreKundeEtterAuth();
+  }, [kundeNavn, bruker, lagreKundeEtterAuth]);
 
   // Slett kunde
   const slettKunde = useCallback(async (id) => {
@@ -550,6 +737,11 @@ export default function PensumPrognoseModell() {
   const illikvideTotal = peTotal + eiendomTotal;
   const totalKapital = likvideTotal + illikvideTotal;
   const nettoKontantstrom = innskudd - uttak;
+  
+  // Sjekk om kunden har alternative investeringer
+  const harAlternativeInvesteringer = illikvideTotal > 0;
+  // Effektiv verdi for checkbox: bruker manuell verdi hvis satt, ellers basert på kundedata
+  const effektivVisAlternative = visAlternativeAllokering !== null ? visAlternativeAllokering : harAlternativeInvesteringer;
 
   // Beregn prognose for Pensum-portefølje (må være etter totalKapital er definert)
   const pensumPrognose = useMemo(() => {
@@ -588,8 +780,18 @@ export default function PensumPrognoseModell() {
   const resetTilAutomatisk = useCallback((nyProfil) => {
     const profil = nyProfil || risikoprofil;
     if (nyProfil) setRisikoprofil(nyProfil);
-    setAllokering(beregnAllokering(likvideTotal, peTotal, eiendomTotal, profil));
-  }, [likvideTotal, peTotal, eiendomTotal, risikoprofil]);
+    // Hvis alternative ikke skal vises, bruk 0 for PE og Eiendom
+    const brukPE = effektivVisAlternative ? peTotal : 0;
+    const brukEiendom = effektivVisAlternative ? eiendomTotal : 0;
+    setAllokering(beregnAllokering(likvideTotal, brukPE, brukEiendom, profil));
+  }, [likvideTotal, peTotal, eiendomTotal, risikoprofil, effektivVisAlternative]);
+
+  // Oppdater allokering automatisk når checkbox for alternative endres
+  useEffect(() => {
+    const brukPE = effektivVisAlternative ? peTotal : 0;
+    const brukEiendom = effektivVisAlternative ? eiendomTotal : 0;
+    setAllokering(beregnAllokering(likvideTotal, brukPE, brukEiendom, risikoprofil));
+  }, [effektivVisAlternative]);
 
   const kategorierData = useMemo(() => {
     const effektivBelop = investertBelop !== null ? investertBelop : totalKapital;
@@ -1060,10 +1262,169 @@ export default function PensumPrognoseModell() {
         }
         .print-only { display: none; }
       `}</style>
+      
+      {/* Login Modal */}
+      {visLoginModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 overflow-hidden">
+            <div className="px-6 py-4" style={{ backgroundColor: PENSUM_COLORS.darkBlue }}>
+              <h3 className="text-lg font-semibold text-white">Logg inn eller registrer deg</h3>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-600 mb-4">
+                For å lagre kunder må du logge inn. Har du ikke bruker? Registrer deg gratis.
+              </p>
+              
+              {authFeilmelding && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  {authFeilmelding}
+                </div>
+              )}
+              
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">E-post</label>
+                  <input 
+                    type="email" 
+                    value={loginEpost} 
+                    onChange={(e) => setLoginEpost(e.target.value)}
+                    placeholder="din@epost.no"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                    onKeyDown={(e) => e.key === 'Enter' && loggInnBruker()}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">PIN-kode</label>
+                  <input 
+                    type="password" 
+                    value={loginPin} 
+                    onChange={(e) => setLoginPin(e.target.value)}
+                    placeholder="••••"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                    onKeyDown={(e) => e.key === 'Enter' && loggInnBruker()}
+                  />
+                </div>
+              </div>
+              
+              <div className="flex gap-3 mt-6">
+                <button 
+                  onClick={loggInnBruker}
+                  className="flex-1 py-2.5 px-4 rounded-lg text-sm font-medium text-white"
+                  style={{ backgroundColor: PENSUM_COLORS.darkBlue }}
+                >
+                  Logg inn
+                </button>
+                <button 
+                  onClick={() => { setVisLoginModal(false); setVisRegistrerModal(true); setAuthFeilmelding(''); }}
+                  className="flex-1 py-2.5 px-4 rounded-lg text-sm font-medium border border-gray-300 hover:bg-gray-50"
+                >
+                  Ny bruker
+                </button>
+              </div>
+              
+              <button 
+                onClick={() => { setVisLoginModal(false); setVentPaaRegistrering(false); setAuthFeilmelding(''); }}
+                className="w-full mt-3 py-2 text-sm text-gray-500 hover:text-gray-700"
+              >
+                Avbryt
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
+      {/* Registrer Modal */}
+      {visRegistrerModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full mx-4 overflow-hidden">
+            <div className="px-6 py-4" style={{ backgroundColor: PENSUM_COLORS.teal }}>
+              <h3 className="text-lg font-semibold text-white">Opprett ny bruker</h3>
+            </div>
+            <div className="p-6">
+              {authFeilmelding && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                  {authFeilmelding}
+                </div>
+              )}
+              
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Ditt navn</label>
+                  <input 
+                    type="text" 
+                    value={registrerNavn} 
+                    onChange={(e) => setRegistrerNavn(e.target.value)}
+                    placeholder="Ola Nordmann"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">E-post</label>
+                  <input 
+                    type="email" 
+                    value={registrerEpost} 
+                    onChange={(e) => setRegistrerEpost(e.target.value)}
+                    placeholder="din@epost.no"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Velg PIN-kode (minst 4 tegn)</label>
+                  <input 
+                    type="password" 
+                    value={registrerPin} 
+                    onChange={(e) => setRegistrerPin(e.target.value)}
+                    placeholder="••••"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                    onKeyDown={(e) => e.key === 'Enter' && registrerBruker()}
+                  />
+                </div>
+              </div>
+              
+              <button 
+                onClick={registrerBruker}
+                className="w-full mt-6 py-2.5 px-4 rounded-lg text-sm font-medium text-white"
+                style={{ backgroundColor: PENSUM_COLORS.teal }}
+              >
+                Opprett bruker
+              </button>
+              
+              <button 
+                onClick={() => { setVisRegistrerModal(false); setVisLoginModal(true); setAuthFeilmelding(''); }}
+                className="w-full mt-3 py-2 text-sm text-gray-500 hover:text-gray-700"
+              >
+                Har allerede bruker? Logg inn
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       <header className="bg-white shadow-sm no-print">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
           <img src={PENSUM_LOGO} alt="Pensum Asset Management" className="h-20 md:h-24" />
           <div className="flex items-center gap-4">
+            {/* Bruker-info */}
+            {bruker ? (
+              <div className="flex items-center gap-2 text-sm">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 bg-green-50 border border-green-200 rounded-lg">
+                  <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                  <span className="text-green-700 font-medium">{bruker.navn}</span>
+                </div>
+                <button onClick={loggUtBruker} className="text-gray-400 hover:text-gray-600" title="Logg ut">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                </button>
+              </div>
+            ) : (
+              <button 
+                onClick={() => setVisLoginModal(true)} 
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 rounded-lg hover:bg-gray-50"
+                style={{ color: PENSUM_COLORS.darkBlue }}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                Logg inn
+              </button>
+            )}
             <div className="flex items-center gap-2">
               <button onClick={() => setVisKundeliste(!visKundeliste)} className={"px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 border " + (visKundeliste ? "bg-blue-100 border-blue-300 text-blue-700" : "border-gray-200 hover:bg-gray-50")} style={{ color: visKundeliste ? undefined : PENSUM_COLORS.darkBlue }}>
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
@@ -1308,7 +1669,7 @@ export default function PensumPrognoseModell() {
                   <label className="flex items-center gap-2 cursor-pointer">
                     <input 
                       type="checkbox" 
-                      checked={visAlternativeAllokering} 
+                      checked={effektivVisAlternative} 
                       onChange={(e) => setVisAlternativeAllokering(e.target.checked)}
                       className="w-4 h-4 rounded"
                     />
@@ -1319,7 +1680,7 @@ export default function PensumPrognoseModell() {
                   <button onClick={() => setShowComparison(!showComparison)} className={"flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border " + (showComparison ? "bg-purple-100 border-purple-300 text-purple-700" : "border-gray-200 hover:bg-gray-100")} style={{ color: showComparison ? undefined : PENSUM_COLORS.darkBlue }}>
                     {showComparison ? 'Skjul sammenligning' : 'Sammenlign'}
                   </button>
-                  <button onClick={() => { resetTilAutomatisk(); setInvestertBelop(null); }} className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 hover:bg-gray-100" style={{ color: PENSUM_COLORS.darkBlue }}>Tilbakestill alt</button>
+                  <button onClick={() => { setVisAlternativeAllokering(null); resetTilAutomatisk(); setInvestertBelop(null); }} className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 hover:bg-gray-100" style={{ color: PENSUM_COLORS.darkBlue }}>Tilbakestill alt</button>
                 </div>
               </div>
               {showComparison && (
@@ -1374,18 +1735,11 @@ export default function PensumPrognoseModell() {
                         <KategoriHeaderRow kategori={kategorierData.find(c => c.kategori === 'renter')} isExpanded={expandedCategories.renter} onToggle={() => toggleCategory('renter')} />
                         {expandedCategories.renter && allokering.filter(a => a.kategori === 'renter').map((item) => <AllokeringRow key={item.navn} item={item} index={allokering.findIndex(a => a.navn === item.navn)} isSubItem={true} />)}
                         {/* Alternative investeringer - vises kun når checkbox er på */}
-                        {visAlternativeAllokering && (
+                        {effektivVisAlternative && (
                           <>
                             {allokering.find(a => a.navn === 'Private Equity') && <AllokeringRow item={allokering.find(a => a.navn === 'Private Equity')} index={allokering.findIndex(a => a.navn === 'Private Equity')} isSubItem={false} />}
                             {allokering.find(a => a.navn === 'Eiendom') && <AllokeringRow item={allokering.find(a => a.navn === 'Eiendom')} index={allokering.findIndex(a => a.navn === 'Eiendom')} isSubItem={false} />}
                           </>
-                        )}
-                        {!visAlternativeAllokering && (allokering.find(a => a.navn === 'Private Equity')?.vekt > 0 || allokering.find(a => a.navn === 'Eiendom')?.vekt > 0) && (
-                          <tr className="bg-amber-50">
-                            <td colSpan={4} className="py-2 px-4 text-sm text-amber-700 italic">
-                              Alternative investeringer er skjult ({formatPercent((allokering.find(a => a.navn === 'Private Equity')?.vekt || 0) + (allokering.find(a => a.navn === 'Eiendom')?.vekt || 0))} av porteføljen)
-                            </td>
-                          </tr>
                         )}
                       </tbody>
                       <tfoot>
