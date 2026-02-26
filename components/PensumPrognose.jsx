@@ -87,6 +87,10 @@ export default function PensumPrognoseModell() {
   const [innskudd, setInnskudd] = useState(0);
   const [uttak, setUttak] = useState(0);
   
+  // Allokering & Prognose - investert beløp og alternative investeringer
+  const [investertBelop, setInvestertBelop] = useState(null); // null = bruk totalKapital fra kundeinformasjon
+  const [visAlternativeAllokering, setVisAlternativeAllokering] = useState(false);
+  
   const [scenarioParams, setScenarioParams] = useState({ pessimistisk: -2, optimistisk: 12 });
   const [sammenligningProfil, setSammenligningProfil] = useState('Offensiv');
   const [sammenligningAllokering, setSammenligningAllokering] = useState(() => beregnAllokering(DEFAULT_LIKVID, DEFAULT_PE, DEFAULT_EIENDOM, 'Offensiv'));
@@ -588,15 +592,16 @@ export default function PensumPrognoseModell() {
   }, [likvideTotal, peTotal, eiendomTotal, risikoprofil]);
 
   const kategorierData = useMemo(() => {
+    const effektivBelop = investertBelop !== null ? investertBelop : totalKapital;
     const cats = ['aksjer', 'renter', 'privateMarkets', 'eiendom'];
     const names = { aksjer: 'Aksjer', renter: 'Renter', privateMarkets: 'Private Equity', eiendom: 'Eiendom' };
     return cats.map(cat => {
       const items = allokering.filter(a => a.kategori === cat);
       const totalVekt = items.reduce((s, a) => s + a.vekt, 0);
       const vektetAvk = totalVekt > 0 ? items.reduce((s, a) => s + a.vekt * a.avkastning, 0) / totalVekt : 0;
-      return { kategori: cat, navn: names[cat], vekt: totalVekt, avkastning: vektetAvk, items, belop: (totalVekt / 100) * totalKapital };
+      return { kategori: cat, navn: names[cat], vekt: totalVekt, avkastning: vektetAvk, items, belop: (totalVekt / 100) * effektivBelop };
     }).filter(c => c.items.length > 0);
-  }, [allokering, totalKapital]);
+  }, [allokering, totalKapital, investertBelop]);
 
   const pieData = useMemo(() => {
     const data = [];
@@ -955,10 +960,13 @@ export default function PensumPrognoseModell() {
     </div>
   );
 
+  // Effektivt investert beløp (bruker manuelt beløp hvis satt, ellers totalKapital)
+  const effektivtInvestertBelop = investertBelop !== null ? investertBelop : totalKapital;
+
   const AllokeringRow = ({ item, index, isSubItem }) => {
     const [localVekt, setLocalVekt] = useState(item.vekt.toString());
-    const [localBelop, setLocalBelop] = useState(formatNumber((item.vekt / 100) * totalKapital));
-    useEffect(() => { setLocalVekt(item.vekt.toFixed(1)); setLocalBelop(formatNumber((item.vekt / 100) * totalKapital)); }, [item.vekt, totalKapital]);
+    const [localBelop, setLocalBelop] = useState(formatNumber((item.vekt / 100) * effektivtInvestertBelop));
+    useEffect(() => { setLocalVekt(item.vekt.toFixed(1)); setLocalBelop(formatNumber((item.vekt / 100) * effektivtInvestertBelop)); }, [item.vekt, effektivtInvestertBelop]);
     
     return (
       <tr className={"border-b border-gray-100 hover:bg-gray-50 " + (isSubItem ? "bg-gray-50" : "")}>
@@ -976,7 +984,7 @@ export default function PensumPrognoseModell() {
         </td>
         <td className="py-3 px-2">
           <div className="flex items-center justify-center">
-            <input type="text" value={localBelop} onChange={(e) => setLocalBelop(e.target.value)} onBlur={() => { const v = parseInt(localBelop.replace(/[^0-9]/g,''),10)||0; updateAllokeringVekt(index, parseFloat((v/totalKapital*100).toFixed(1))); }} className="w-28 text-center text-sm border border-gray-200 rounded py-1.5 px-2" />
+            <input type="text" value={localBelop} onChange={(e) => setLocalBelop(e.target.value)} onBlur={() => { const v = parseInt(localBelop.replace(/[^0-9]/g,''),10)||0; updateAllokeringVekt(index, parseFloat((v/effektivtInvestertBelop*100).toFixed(1))); }} className="w-28 text-center text-sm border border-gray-200 rounded py-1.5 px-2" />
             <span className="ml-1 text-gray-400 text-xs">kr</span>
           </div>
         </td>
@@ -1206,7 +1214,7 @@ export default function PensumPrognoseModell() {
                     <CurrencyInput label="Renter" value={renterKunde} onChange={setRenterKunde} />
                     <CurrencyInput label="Kontanter (bank)" value={kontanterKunde} onChange={setKontanterKunde} />
                   </CollapsibleSection>
-                  <CollapsibleSection title="Illikvide midler" isOpen={expandedKundeKategorier.illikvide} onToggle={() => toggleKundeKategori('illikvide')} sum={illikvideTotal}>
+                  <CollapsibleSection title="Alternative investeringer" isOpen={expandedKundeKategorier.illikvide} onToggle={() => toggleKundeKategori('illikvide')} sum={illikvideTotal}>
                     <div className="mb-3">
                       <div className="flex items-center justify-between cursor-pointer py-2 px-3 bg-gray-50 rounded-lg hover:bg-gray-100" onClick={() => toggleKundeKategori('pe')}>
                         <span className="text-sm font-medium" style={{ color: PENSUM_COLORS.teal }}>Private Equity</span>
@@ -1266,17 +1274,52 @@ export default function PensumPrognoseModell() {
           <div className="space-y-6 no-print">
             <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4">
               <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-4">
-                  <label className="text-sm font-medium" style={{ color: PENSUM_COLORS.darkBlue }}>Risikoprofil:</label>
-                  <select value={risikoprofil} onChange={(e) => resetTilAutomatisk(e.target.value)} className="border border-gray-200 rounded-lg py-2 px-4">
-                    <option>Defensiv</option><option>Moderat</option><option>Dynamisk</option><option>Offensiv</option>
-                  </select>
+                <div className="flex items-center gap-6">
+                  {/* Investert beløp */}
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium" style={{ color: PENSUM_COLORS.darkBlue }}>Investert beløp:</label>
+                    <input 
+                      type="text" 
+                      value={investertBelop !== null ? formatNumber(investertBelop) : formatNumber(totalKapital)}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value.replace(/\s/g, '').replace(/[^0-9]/g, '')) || 0;
+                        setInvestertBelop(value);
+                      }}
+                      className="border border-gray-200 rounded-lg py-2 px-3 w-36 text-right"
+                    />
+                    {investertBelop !== null && (
+                      <button 
+                        onClick={() => setInvestertBelop(null)} 
+                        className="text-xs text-blue-600 hover:text-blue-800 underline"
+                        title="Tilbakestill til kundeinformasjon"
+                      >
+                        Tilbakestill
+                      </button>
+                    )}
+                  </div>
+                  {/* Risikoprofil */}
+                  <div className="flex items-center gap-2">
+                    <label className="text-sm font-medium" style={{ color: PENSUM_COLORS.darkBlue }}>Risikoprofil:</label>
+                    <select value={risikoprofil} onChange={(e) => resetTilAutomatisk(e.target.value)} className="border border-gray-200 rounded-lg py-2 px-4">
+                      <option>Defensiv</option><option>Moderat</option><option>Dynamisk</option><option>Offensiv</option>
+                    </select>
+                  </div>
+                  {/* Alternative investeringer checkbox */}
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={visAlternativeAllokering} 
+                      onChange={(e) => setVisAlternativeAllokering(e.target.checked)}
+                      className="w-4 h-4 rounded"
+                    />
+                    <span className="text-sm font-medium" style={{ color: PENSUM_COLORS.teal }}>Alternative investeringer</span>
+                  </label>
                 </div>
                 <div className="flex items-center gap-3">
                   <button onClick={() => setShowComparison(!showComparison)} className={"flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium border " + (showComparison ? "bg-purple-100 border-purple-300 text-purple-700" : "border-gray-200 hover:bg-gray-100")} style={{ color: showComparison ? undefined : PENSUM_COLORS.darkBlue }}>
                     {showComparison ? 'Skjul sammenligning' : 'Sammenlign'}
                   </button>
-                  <button onClick={() => resetTilAutomatisk()} className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 hover:bg-gray-100" style={{ color: PENSUM_COLORS.darkBlue }}>Tilbakestill</button>
+                  <button onClick={() => { resetTilAutomatisk(); setInvestertBelop(null); }} className="px-4 py-2 rounded-lg text-sm font-medium border border-gray-200 hover:bg-gray-100" style={{ color: PENSUM_COLORS.darkBlue }}>Tilbakestill alt</button>
                 </div>
               </div>
               {showComparison && (
@@ -1330,14 +1373,26 @@ export default function PensumPrognoseModell() {
                         {expandedCategories.aksjer && allokering.filter(a => a.kategori === 'aksjer').map((item) => <AllokeringRow key={item.navn} item={item} index={allokering.findIndex(a => a.navn === item.navn)} isSubItem={true} />)}
                         <KategoriHeaderRow kategori={kategorierData.find(c => c.kategori === 'renter')} isExpanded={expandedCategories.renter} onToggle={() => toggleCategory('renter')} />
                         {expandedCategories.renter && allokering.filter(a => a.kategori === 'renter').map((item) => <AllokeringRow key={item.navn} item={item} index={allokering.findIndex(a => a.navn === item.navn)} isSubItem={true} />)}
-                        {allokering.find(a => a.navn === 'Private Equity') && <AllokeringRow item={allokering.find(a => a.navn === 'Private Equity')} index={allokering.findIndex(a => a.navn === 'Private Equity')} isSubItem={false} />}
-                        {allokering.find(a => a.navn === 'Eiendom') && <AllokeringRow item={allokering.find(a => a.navn === 'Eiendom')} index={allokering.findIndex(a => a.navn === 'Eiendom')} isSubItem={false} />}
+                        {/* Alternative investeringer - vises kun når checkbox er på */}
+                        {visAlternativeAllokering && (
+                          <>
+                            {allokering.find(a => a.navn === 'Private Equity') && <AllokeringRow item={allokering.find(a => a.navn === 'Private Equity')} index={allokering.findIndex(a => a.navn === 'Private Equity')} isSubItem={false} />}
+                            {allokering.find(a => a.navn === 'Eiendom') && <AllokeringRow item={allokering.find(a => a.navn === 'Eiendom')} index={allokering.findIndex(a => a.navn === 'Eiendom')} isSubItem={false} />}
+                          </>
+                        )}
+                        {!visAlternativeAllokering && (allokering.find(a => a.navn === 'Private Equity')?.vekt > 0 || allokering.find(a => a.navn === 'Eiendom')?.vekt > 0) && (
+                          <tr className="bg-amber-50">
+                            <td colSpan={4} className="py-2 px-4 text-sm text-amber-700 italic">
+                              Alternative investeringer er skjult ({formatPercent((allokering.find(a => a.navn === 'Private Equity')?.vekt || 0) + (allokering.find(a => a.navn === 'Eiendom')?.vekt || 0))} av porteføljen)
+                            </td>
+                          </tr>
+                        )}
                       </tbody>
                       <tfoot>
                         <tr style={{ backgroundColor: PENSUM_COLORS.lightGray }}>
                           <td className="py-4 px-4 font-bold" style={{ color: PENSUM_COLORS.darkBlue }}>Sum</td>
                           <td className={"py-4 px-2 text-center font-bold " + (Math.abs(totalVekt - 100) < 0.5 ? "text-green-600" : "text-red-600")}>{formatPercent(totalVekt)}</td>
-                          <td className="py-4 px-2 text-center font-bold" style={{ color: PENSUM_COLORS.darkBlue }}>{formatCurrency(totalKapital)}</td>
+                          <td className="py-4 px-2 text-center font-bold" style={{ color: PENSUM_COLORS.darkBlue }}>{formatCurrency(investertBelop !== null ? investertBelop : totalKapital)}</td>
                           <td className="py-4 px-2 text-center font-bold" style={{ color: PENSUM_COLORS.darkBlue }}>{formatPercent(vektetAvkastning)}</td>
                         </tr>
                       </tfoot>
