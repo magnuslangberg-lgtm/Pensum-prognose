@@ -1,293 +1,273 @@
-import React, { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
+  STANDARD_PENSUM_PRODUKTER,
   importPensumExcel,
   loadPensumProdukterFromStorage,
-  resetPensumProdukterInStorage,
   savePensumProdukterToStorage,
-  STANDARD_PENSUM_PRODUKTER
+  resetPensumProdukterInStorage,
 } from '../lib/pensumExcelImport';
 
-const PENSUM_COLORS = {
+const COLORS = {
   navy: '#0D2240',
-  lightGray: '#F5F7FA',
-  white: '#FFFFFF',
-  green: '#2E7D32',
-  red: '#C62828',
-  teal: '#0D9488',
-  gold: '#B8860B'
+  blue: '#1B3A5F',
+  light: '#F5F7FA',
+  border: '#E5E7EB',
+  green: '#16A34A',
+  red: '#DC2626',
+  amber: '#D97706',
 };
 
 function formatPercent(value) {
-  if (value === null || value === undefined) return '—';
-  return `${Number(value).toFixed(1)} %`;
+  if (value === null || value === undefined || value === '') return '—';
+  return `${Number(value).toFixed(1)}%`;
 }
 
-function flattenProducts(data) {
-  return [
-    ...data.enkeltfond.map((x) => ({ ...x, kategori: 'Enkeltfond' })),
-    ...data.fondsportefoljer.map((x) => ({ ...x, kategori: 'Fondsporteføljer' })),
-    ...data.alternative.map((x) => ({ ...x, kategori: 'Alternative' }))
-  ];
+function ProduktTable({ title, items }) {
+  return (
+    <div style={{ background: 'white', border: `1px solid ${COLORS.border}`, borderRadius: 12, overflow: 'hidden' }}>
+      <div style={{ background: COLORS.navy, color: 'white', padding: '14px 18px', fontWeight: 700 }}>
+        {title}
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+          <thead>
+            <tr style={{ background: COLORS.light }}>
+              <th style={th}>Navn</th>
+              <th style={thRight}>2024</th>
+              <th style={thRight}>2023</th>
+              <th style={thRight}>2022</th>
+              <th style={thRight}>2021</th>
+              <th style={thRight}>2020</th>
+              <th style={thRight}>Årlig 3 år</th>
+              <th style={thRight}>Risiko 3 år</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((item, idx) => (
+              <tr key={item.id} style={{ background: idx % 2 === 0 ? 'white' : '#FAFAFA' }}>
+                <td style={tdName}>{item.navn}</td>
+                <td style={tdRight}>{formatPercent(item.aar2024)}</td>
+                <td style={tdRight}>{formatPercent(item.aar2023)}</td>
+                <td style={tdRight}>{formatPercent(item.aar2022)}</td>
+                <td style={tdRight}>{formatPercent(item.aar2021)}</td>
+                <td style={tdRight}>{formatPercent(item.aar2020)}</td>
+                <td style={tdRight}>{formatPercent(item.aarlig3ar)}</td>
+                <td style={tdRight}>{formatPercent(item.risiko3ar)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
+
+const th = {
+  textAlign: 'left',
+  padding: '12px 14px',
+  borderBottom: `1px solid ${COLORS.border}`,
+  color: COLORS.blue,
+  fontWeight: 700,
+};
+
+const thRight = {
+  ...th,
+  textAlign: 'right',
+};
+
+const tdName = {
+  padding: '10px 14px',
+  borderBottom: `1px solid ${COLORS.border}`,
+  color: COLORS.blue,
+  fontWeight: 600,
+};
+
+const tdRight = {
+  padding: '10px 14px',
+  borderBottom: `1px solid ${COLORS.border}`,
+  textAlign: 'right',
+  color: '#374151',
+};
 
 export default function AdminPage() {
-  const [produkter, setProdukter] = useState(() => loadPensumProdukterFromStorage());
-  const [status, setStatus] = useState('');
-  const [error, setError] = useState('');
-  const [lastImportInfo, setLastImportInfo] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [produkter, setProdukter] = useState(STANDARD_PENSUM_PRODUKTER);
+  const [status, setStatus] = useState('Klar');
+  const [isBusy, setIsBusy] = useState(false);
 
-  const allProducts = useMemo(() => flattenProducts(produkter), [produkter]);
+  useEffect(() => {
+    const data = loadPensumProdukterFromStorage();
+    setProdukter(data);
+  }, []);
 
-  const handleFileUpload = async (event) => {
-    const file = event.target.files?.[0];
+  const totalAntall = useMemo(() => {
+    return (
+      produkter.enkeltfond.length +
+      produkter.fondsportefoljer.length +
+      produkter.alternative.length
+    );
+  }, [produkter]);
+
+  async function handleFileChange(e) {
+    const file = e.target.files?.[0];
     if (!file) return;
 
-    setIsLoading(true);
-    setStatus('');
-    setError('');
+    setIsBusy(true);
+    setStatus('Leser Excel-fil ...');
 
     try {
-      const result = await importPensumExcel(file);
-
-      setProdukter(result.produkter);
-      savePensumProdukterToStorage(result.produkter);
-
-      setLastImportInfo(result);
-      setStatus(`Import fullført. ${result.updated.length} produkter oppdatert.`);
+      const imported = await importPensumExcel(file);
+      setProdukter(imported);
+      savePensumProdukterToStorage(imported);
+      setStatus(`Import fullført: ${file.name}`);
     } catch (err) {
-      setError(err.message || 'Noe gikk galt under import.');
+      console.error(err);
+      setStatus('Feil ved import av Excel-fil');
+      alert('Kunne ikke lese Excel-filen. Sjekk formatet og prøv igjen.');
     } finally {
-      setIsLoading(false);
-      event.target.value = '';
+      setIsBusy(false);
+      e.target.value = '';
     }
-  };
+  }
 
-  const handleReset = () => {
-    resetPensumProdukterInStorage();
-    setProdukter(STANDARD_PENSUM_PRODUKTER);
-    setLastImportInfo(null);
-    setStatus('Lokale admin-data er nullstilt.');
-    setError('');
-  };
+  function handleReset() {
+    const ok = window.confirm('Vil du nullstille til standarddata?');
+    if (!ok) return;
 
-  const handleReload = () => {
-    const latest = loadPensumProdukterFromStorage();
-    setProdukter(latest);
-    setStatus('Data lastet fra nettleserens lagring.');
-    setError('');
-  };
+    const resetData = resetPensumProdukterInStorage();
+    setProdukter(resetData);
+    setStatus('Nullstilt til standarddata');
+  }
 
   return (
-    <div style={{ minHeight: '100vh', background: PENSUM_COLORS.lightGray, padding: '32px 20px' }}>
-      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+    <div style={{ minHeight: '100vh', background: COLORS.light, padding: 24 }}>
+      <div style={{ maxWidth: 1200, margin: '0 auto' }}>
         <div
           style={{
-            background: PENSUM_COLORS.navy,
-            color: PENSUM_COLORS.white,
-            borderRadius: 16,
-            padding: 24,
-            marginBottom: 24
-          }}
-        >
-          <h1 style={{ margin: 0, fontSize: 28, fontWeight: 700 }}>Pensum Admin</h1>
-          <p style={{ margin: '8px 0 0 0', opacity: 0.9 }}>
-            Last opp månedlig Excel-fil og lagre oppdaterte tall for Pensum Løsninger.
-          </p>
-        </div>
-
-        <div
-          style={{
-            background: PENSUM_COLORS.white,
-            borderRadius: 16,
+            background: 'white',
+            border: `1px solid ${COLORS.border}`,
+            borderRadius: 14,
             padding: 24,
             marginBottom: 24,
-            boxShadow: '0 2px 10px rgba(0,0,0,0.05)'
           }}
         >
-          <h2 style={{ marginTop: 0, color: PENSUM_COLORS.navy }}>Importer Excel</h2>
+          <h1 style={{ margin: 0, fontSize: 28, color: COLORS.navy }}>Admin 2.0</h1>
+          <p style={{ marginTop: 8, marginBottom: 0, color: '#6B7280' }}>
+            Last opp månedlig Excel-fil for å oppdatere tall i Pensum Løsninger.
+          </p>
 
-          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 16 }}>
+          <div
+            style={{
+              marginTop: 20,
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: 12,
+              alignItems: 'center',
+            }}
+          >
             <label
               style={{
-                background: PENSUM_COLORS.teal,
-                color: '#fff',
-                padding: '12px 18px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '12px 16px',
+                background: COLORS.navy,
+                color: 'white',
                 borderRadius: 10,
-                cursor: 'pointer',
-                fontWeight: 600
+                cursor: isBusy ? 'not-allowed' : 'pointer',
+                opacity: isBusy ? 0.7 : 1,
+                fontWeight: 600,
               }}
             >
-              {isLoading ? 'Leser fil...' : 'Velg Excel-fil'}
+              Last opp Excel
               <input
                 type="file"
                 accept=".xlsx,.xls"
-                onChange={handleFileUpload}
+                onChange={handleFileChange}
+                disabled={isBusy}
                 style={{ display: 'none' }}
-                disabled={isLoading}
               />
             </label>
 
             <button
-              onClick={handleReload}
-              style={{
-                background: '#fff',
-                color: PENSUM_COLORS.navy,
-                border: `1px solid ${PENSUM_COLORS.navy}`,
-                padding: '12px 18px',
-                borderRadius: 10,
-                cursor: 'pointer',
-                fontWeight: 600
-              }}
-            >
-              Last inn lagrede data
-            </button>
-
-            <button
               onClick={handleReset}
               style={{
-                background: '#fff',
-                color: PENSUM_COLORS.red,
-                border: `1px solid ${PENSUM_COLORS.red}`,
-                padding: '12px 18px',
+                padding: '12px 16px',
+                background: 'white',
+                color: COLORS.red,
+                border: `1px solid ${COLORS.border}`,
                 borderRadius: 10,
                 cursor: 'pointer',
-                fontWeight: 600
+                fontWeight: 600,
               }}
             >
-              Nullstill admin-data
+              Nullstill
             </button>
+
+            <div
+              style={{
+                padding: '12px 16px',
+                background: '#F9FAFB',
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: 10,
+                color: '#374151',
+              }}
+            >
+              Status: <strong>{status}</strong>
+            </div>
           </div>
-
-          {status ? (
-            <div
-              style={{
-                background: '#ECFDF5',
-                color: PENSUM_COLORS.green,
-                border: `1px solid #A7F3D0`,
-                padding: 12,
-                borderRadius: 10,
-                marginBottom: 12
-              }}
-            >
-              {status}
-            </div>
-          ) : null}
-
-          {error ? (
-            <div
-              style={{
-                background: '#FEF2F2',
-                color: PENSUM_COLORS.red,
-                border: `1px solid #FECACA`,
-                padding: 12,
-                borderRadius: 10,
-                marginBottom: 12
-              }}
-            >
-              {error}
-            </div>
-          ) : null}
-
-          {lastImportInfo ? (
-            <div
-              style={{
-                background: '#F8FAFC',
-                border: '1px solid #E2E8F0',
-                padding: 16,
-                borderRadius: 10
-              }}
-            >
-              <div><strong>Ark:</strong> {lastImportInfo.sheetName}</div>
-              <div><strong>Antall rader lest:</strong> {lastImportInfo.rowCount}</div>
-              <div><strong>Oppdatert:</strong> {lastImportInfo.updated.length}</div>
-              <div><strong>Hoppet over:</strong> {lastImportInfo.skipped.length}</div>
-
-              {lastImportInfo.updated.length > 0 && (
-                <div style={{ marginTop: 12 }}>
-                  <strong>Oppdaterte produkter:</strong>
-                  <ul style={{ margin: '8px 0 0 18px' }}>
-                    {lastImportInfo.updated.map((name) => (
-                      <li key={name}>{name}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {lastImportInfo.skipped.length > 0 && (
-                <div style={{ marginTop: 12 }}>
-                  <strong>Ikke matchet:</strong>
-                  <ul style={{ margin: '8px 0 0 18px' }}>
-                    {lastImportInfo.skipped.map((name, index) => (
-                      <li key={`${name}-${index}`}>{name}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-            </div>
-          ) : null}
         </div>
 
         <div
           style={{
-            background: PENSUM_COLORS.white,
-            borderRadius: 16,
-            padding: 24,
-            boxShadow: '0 2px 10px rgba(0,0,0,0.05)'
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+            gap: 16,
+            marginBottom: 24,
           }}
         >
-          <h2 style={{ marginTop: 0, color: PENSUM_COLORS.navy }}>Gjeldende data</h2>
-
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-              <thead>
-                <tr style={{ background: '#F8FAFC' }}>
-                  <th style={thStyle}>Kategori</th>
-                  <th style={thStyle}>Navn</th>
-                  <th style={thStyle}>2024</th>
-                  <th style={thStyle}>2023</th>
-                  <th style={thStyle}>2022</th>
-                  <th style={thStyle}>2021</th>
-                  <th style={thStyle}>2020</th>
-                  <th style={thStyle}>Årlig 3 år</th>
-                  <th style={thStyle}>Risiko 3 år</th>
-                </tr>
-              </thead>
-              <tbody>
-                {allProducts.map((item) => (
-                  <tr key={item.id}>
-                    <td style={tdStyle}>{item.kategori}</td>
-                    <td style={tdStyle}>{item.navn}</td>
-                    <td style={tdStyle}>{formatPercent(item.aar2024)}</td>
-                    <td style={tdStyle}>{formatPercent(item.aar2023)}</td>
-                    <td style={tdStyle}>{formatPercent(item.aar2022)}</td>
-                    <td style={tdStyle}>{formatPercent(item.aar2021)}</td>
-                    <td style={tdStyle}>{formatPercent(item.aar2020)}</td>
-                    <td style={tdStyle}>{formatPercent(item.aarlig3ar)}</td>
-                    <td style={tdStyle}>{formatPercent(item.risiko3ar)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div style={card}>
+            <div style={cardLabel}>Totalt produkter</div>
+            <div style={cardValue}>{totalAntall}</div>
           </div>
+          <div style={card}>
+            <div style={cardLabel}>Enkeltfond</div>
+            <div style={cardValue}>{produkter.enkeltfond.length}</div>
+          </div>
+          <div style={card}>
+            <div style={cardLabel}>Fondsporteføljer</div>
+            <div style={cardValue}>{produkter.fondsportefoljer.length}</div>
+          </div>
+          <div style={card}>
+            <div style={cardLabel}>Alternative</div>
+            <div style={cardValue}>{produkter.alternative.length}</div>
+          </div>
+        </div>
 
-          <p style={{ marginTop: 16, color: '#64748B', fontSize: 13 }}>
-            Denne siden lagrer data i nettleseren din. Neste steg er å koble hovedsiden til samme lagring.
-          </p>
+        <div style={{ display: 'grid', gap: 20 }}>
+          <ProduktTable title="Enkeltfond" items={produkter.enkeltfond} />
+          <ProduktTable title="Fondsporteføljer" items={produkter.fondsportefoljer} />
+          <ProduktTable title="Alternative investeringer" items={produkter.alternative} />
         </div>
       </div>
     </div>
   );
 }
 
-const thStyle = {
-  textAlign: 'left',
-  padding: '12px 10px',
-  borderBottom: '1px solid #E2E8F0',
-  color: '#0D2240'
+const card = {
+  background: 'white',
+  border: `1px solid ${COLORS.border}`,
+  borderRadius: 12,
+  padding: 18,
 };
 
-const tdStyle = {
-  padding: '10px',
-  borderBottom: '1px solid #F1F5F9'
+const cardLabel = {
+  fontSize: 13,
+  color: '#6B7280',
+  marginBottom: 8,
+};
+
+const cardValue = {
+  fontSize: 28,
+  fontWeight: 800,
+  color: COLORS.navy,
 };
