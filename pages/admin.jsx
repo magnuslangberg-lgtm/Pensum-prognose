@@ -1,252 +1,184 @@
-import { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   STANDARD_PENSUM_PRODUKTER,
   importPensumExcel,
   loadPensumProdukterFromStorage,
-  savePensumProdukterToStorage,
-  resetPensumProdukterInStorage,
+  resetPensumProdukterInStorage
 } from '../lib/pensumExcelImport';
 
-const COLORS = {
-  navy: '#0D2240',
-  blue: '#1B3A5F',
-  light: '#F5F7FA',
-  border: '#E5E7EB',
-  green: '#16A34A',
-  red: '#DC2626',
-  amber: '#D97706',
-};
-
-function formatPercent(value) {
-  if (value === null || value === undefined || value === '') return '—';
-  return `${Number(value).toFixed(1)}%`;
-}
-
-function ProduktTable({ title, items }) {
-  return (
-    <div style={{ background: 'white', border: `1px solid ${COLORS.border}`, borderRadius: 12, overflow: 'hidden' }}>
-      <div style={{ background: COLORS.navy, color: 'white', padding: '14px 18px', fontWeight: 700 }}>
-        {title}
-      </div>
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
-          <thead>
-            <tr style={{ background: COLORS.light }}>
-              <th style={th}>Navn</th>
-              <th style={thRight}>2024</th>
-              <th style={thRight}>2023</th>
-              <th style={thRight}>2022</th>
-              <th style={thRight}>2021</th>
-              <th style={thRight}>2020</th>
-              <th style={thRight}>Årlig 3 år</th>
-              <th style={thRight}>Risiko 3 år</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item, idx) => (
-              <tr key={item.id} style={{ background: idx % 2 === 0 ? 'white' : '#FAFAFA' }}>
-                <td style={tdName}>{item.navn}</td>
-                <td style={tdRight}>{formatPercent(item.aar2024)}</td>
-                <td style={tdRight}>{formatPercent(item.aar2023)}</td>
-                <td style={tdRight}>{formatPercent(item.aar2022)}</td>
-                <td style={tdRight}>{formatPercent(item.aar2021)}</td>
-                <td style={tdRight}>{formatPercent(item.aar2020)}</td>
-                <td style={tdRight}>{formatPercent(item.aarlig3ar)}</td>
-                <td style={tdRight}>{formatPercent(item.risiko3ar)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
-const th = {
-  textAlign: 'left',
-  padding: '12px 14px',
-  borderBottom: `1px solid ${COLORS.border}`,
-  color: COLORS.blue,
-  fontWeight: 700,
-};
-
-const thRight = {
-  ...th,
-  textAlign: 'right',
-};
-
-const tdName = {
-  padding: '10px 14px',
-  borderBottom: `1px solid ${COLORS.border}`,
-  color: COLORS.blue,
-  fontWeight: 600,
-};
-
-const tdRight = {
-  padding: '10px 14px',
-  borderBottom: `1px solid ${COLORS.border}`,
-  textAlign: 'right',
-  color: '#374151',
-};
-
 export default function AdminPage() {
+  const [mounted, setMounted] = useState(false);
   const [produkter, setProdukter] = useState(STANDARD_PENSUM_PRODUKTER);
-  const [status, setStatus] = useState('Klar');
-  const [isBusy, setIsBusy] = useState(false);
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState('');
+  const [importResult, setImportResult] = useState(null);
 
   useEffect(() => {
-    const data = loadPensumProdukterFromStorage();
-    setProdukter(data);
+    setMounted(true);
+    try {
+      const data = loadPensumProdukterFromStorage();
+      setProdukter(data);
+    } catch (e) {
+      console.error(e);
+      setError('Kunne ikke laste admin-data.');
+    }
   }, []);
-
-  const totalAntall = useMemo(() => {
-    return (
-      produkter.enkeltfond.length +
-      produkter.fondsportefoljer.length +
-      produkter.alternative.length
-    );
-  }, [produkter]);
 
   async function handleFileChange(e) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setIsBusy(true);
-    setStatus('Leser Excel-fil ...');
+    setStatus('Laster inn Excel-fil...');
+    setError('');
+    setImportResult(null);
 
     try {
-      const imported = await importPensumExcel(file);
-      setProdukter(imported);
-      savePensumProdukterToStorage(imported);
-      setStatus(`Import fullført: ${file.name}`);
+      const result = await importPensumExcel(file);
+      setProdukter(result.produkter);
+      setImportResult(result);
+      setStatus(`Ferdig. Oppdaterte ${result.oppdaterte} produkt(er).`);
     } catch (err) {
       console.error(err);
-      setStatus('Feil ved import av Excel-fil');
-      alert('Kunne ikke lese Excel-filen. Sjekk formatet og prøv igjen.');
-    } finally {
-      setIsBusy(false);
-      e.target.value = '';
+      setError(err.message || 'Noe gikk galt ved import.');
+      setStatus('');
     }
+
+    e.target.value = '';
   }
 
   function handleReset() {
-    const ok = window.confirm('Vil du nullstille til standarddata?');
-    if (!ok) return;
+    try {
+      const resetData = resetPensumProdukterInStorage();
+      setProdukter(resetData);
+      setImportResult(null);
+      setError('');
+      setStatus('Data er nullstilt til standardverdier.');
+    } catch (err) {
+      console.error(err);
+      setError('Kunne ikke nullstille data.');
+    }
+  }
 
-    const resetData = resetPensumProdukterInStorage();
-    setProdukter(resetData);
-    setStatus('Nullstilt til standarddata');
+  function renderRows(list) {
+    return list.map((p) => (
+      <tr key={p.id} style={{ borderBottom: '1px solid #e5e7eb' }}>
+        <td style={td}>{p.navn}</td>
+        <td style={tdCenter}>{p.aar2024 ?? '—'}</td>
+        <td style={tdCenter}>{p.aar2023 ?? '—'}</td>
+        <td style={tdCenter}>{p.aar2022 ?? '—'}</td>
+        <td style={tdCenter}>{p.aar2021 ?? '—'}</td>
+        <td style={tdCenter}>{p.aar2020 ?? '—'}</td>
+        <td style={tdCenter}>{p.aarlig3ar ?? p.forventetAvkastning ?? '—'}</td>
+        <td style={tdCenter}>{p.risiko3ar ?? '—'}</td>
+      </tr>
+    ));
+  }
+
+  if (!mounted) {
+    return <div style={{ padding: 24, fontFamily: 'Arial, sans-serif' }}>Laster admin...</div>;
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: COLORS.light, padding: 24 }}>
+    <div style={{ minHeight: '100vh', background: '#f5f7fa', padding: 24, fontFamily: 'Arial, sans-serif' }}>
       <div style={{ maxWidth: 1200, margin: '0 auto' }}>
-        <div
-          style={{
-            background: 'white',
-            border: `1px solid ${COLORS.border}`,
-            borderRadius: 14,
-            padding: 24,
-            marginBottom: 24,
-          }}
-        >
-          <h1 style={{ margin: 0, fontSize: 28, color: COLORS.navy }}>Admin 2.0</h1>
-          <p style={{ marginTop: 8, marginBottom: 0, color: '#6B7280' }}>
-            Last opp månedlig Excel-fil for å oppdatere tall i Pensum Løsninger.
+        <div style={card}>
+          <h1 style={{ marginTop: 0, color: '#0D2240' }}>Pensum admin</h1>
+          <p style={{ color: '#475569', marginTop: 8 }}>
+            Last opp månedlig Excel-fil for å oppdatere tallene som lagres lokalt i nettleseren.
           </p>
 
-          <div
-            style={{
-              marginTop: 20,
-              display: 'flex',
-              flexWrap: 'wrap',
-              gap: 12,
-              alignItems: 'center',
-            }}
-          >
-            <label
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '12px 16px',
-                background: COLORS.navy,
-                color: 'white',
-                borderRadius: 10,
-                cursor: isBusy ? 'not-allowed' : 'pointer',
-                opacity: isBusy ? 0.7 : 1,
-                fontWeight: 600,
-              }}
-            >
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 20 }}>
+            <label style={primaryButton}>
               Last opp Excel
               <input
                 type="file"
                 accept=".xlsx,.xls"
                 onChange={handleFileChange}
-                disabled={isBusy}
                 style={{ display: 'none' }}
               />
             </label>
 
-            <button
-              onClick={handleReset}
-              style={{
-                padding: '12px 16px',
-                background: 'white',
-                color: COLORS.red,
-                border: `1px solid ${COLORS.border}`,
-                borderRadius: 10,
-                cursor: 'pointer',
-                fontWeight: 600,
-              }}
-            >
-              Nullstill
+            <button onClick={handleReset} style={secondaryButton}>
+              Nullstill til standard
             </button>
+          </div>
 
-            <div
-              style={{
-                padding: '12px 16px',
-                background: '#F9FAFB',
-                border: `1px solid ${COLORS.border}`,
-                borderRadius: 10,
-                color: '#374151',
-              }}
-            >
-              Status: <strong>{status}</strong>
+          {status && <div style={successBox}>{status}</div>}
+          {error && <div style={errorBox}>{error}</div>}
+
+          {importResult && (
+            <div style={infoBox}>
+              <div><strong>Oppdaterte produkter:</strong> {importResult.oppdaterte}</div>
+              {importResult.ikkeMatchet?.length > 0 && (
+                <div style={{ marginTop: 8 }}>
+                  <strong>Ikke matchet i filen:</strong> {importResult.ikkeMatchet.join(', ')}
+                </div>
+              )}
             </div>
+          )}
+        </div>
+
+        <div style={card}>
+          <h2 style={sectionTitle}>Enkeltfond</h2>
+          <div style={tableWrap}>
+            <table style={table}>
+              <thead>
+                <tr>
+                  <th style={thLeft}>Navn</th>
+                  <th style={th}>2024</th>
+                  <th style={th}>2023</th>
+                  <th style={th}>2022</th>
+                  <th style={th}>2021</th>
+                  <th style={th}>2020</th>
+                  <th style={th}>Årlig 3 år</th>
+                  <th style={th}>Risiko 3 år</th>
+                </tr>
+              </thead>
+              <tbody>{renderRows(produkter.enkeltfond)}</tbody>
+            </table>
           </div>
         </div>
 
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-            gap: 16,
-            marginBottom: 24,
-          }}
-        >
-          <div style={card}>
-            <div style={cardLabel}>Totalt produkter</div>
-            <div style={cardValue}>{totalAntall}</div>
-          </div>
-          <div style={card}>
-            <div style={cardLabel}>Enkeltfond</div>
-            <div style={cardValue}>{produkter.enkeltfond.length}</div>
-          </div>
-          <div style={card}>
-            <div style={cardLabel}>Fondsporteføljer</div>
-            <div style={cardValue}>{produkter.fondsportefoljer.length}</div>
-          </div>
-          <div style={card}>
-            <div style={cardLabel}>Alternative</div>
-            <div style={cardValue}>{produkter.alternative.length}</div>
+        <div style={card}>
+          <h2 style={sectionTitle}>Fondsporteføljer</h2>
+          <div style={tableWrap}>
+            <table style={table}>
+              <thead>
+                <tr>
+                  <th style={thLeft}>Navn</th>
+                  <th style={th}>2024</th>
+                  <th style={th}>2023</th>
+                  <th style={th}>2022</th>
+                  <th style={th}>2021</th>
+                  <th style={th}>2020</th>
+                  <th style={th}>Årlig 3 år</th>
+                  <th style={th}>Risiko 3 år</th>
+                </tr>
+              </thead>
+              <tbody>{renderRows(produkter.fondsportefoljer)}</tbody>
+            </table>
           </div>
         </div>
 
-        <div style={{ display: 'grid', gap: 20 }}>
-          <ProduktTable title="Enkeltfond" items={produkter.enkeltfond} />
-          <ProduktTable title="Fondsporteføljer" items={produkter.fondsportefoljer} />
-          <ProduktTable title="Alternative investeringer" items={produkter.alternative} />
+        <div style={card}>
+          <h2 style={sectionTitle}>Alternative investeringer</h2>
+          <div style={tableWrap}>
+            <table style={table}>
+              <thead>
+                <tr>
+                  <th style={thLeft}>Navn</th>
+                  <th style={th}>2024</th>
+                  <th style={th}>2023</th>
+                  <th style={th}>2022</th>
+                  <th style={th}>2021</th>
+                  <th style={th}>2020</th>
+                  <th style={th}>Årlig / forventet</th>
+                  <th style={th}>Risiko 3 år</th>
+                </tr>
+              </thead>
+              <tbody>{renderRows(produkter.alternative)}</tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>
@@ -254,20 +186,92 @@ export default function AdminPage() {
 }
 
 const card = {
-  background: 'white',
-  border: `1px solid ${COLORS.border}`,
+  background: '#ffffff',
   borderRadius: 12,
-  padding: 18,
+  padding: 24,
+  marginBottom: 20,
+  boxShadow: '0 1px 3px rgba(0,0,0,0.08)'
 };
 
-const cardLabel = {
-  fontSize: 13,
-  color: '#6B7280',
-  marginBottom: 8,
+const sectionTitle = {
+  marginTop: 0,
+  marginBottom: 16,
+  color: '#0D2240'
 };
 
-const cardValue = {
-  fontSize: 28,
-  fontWeight: 800,
-  color: COLORS.navy,
+const tableWrap = {
+  overflowX: 'auto'
+};
+
+const table = {
+  width: '100%',
+  borderCollapse: 'collapse',
+  fontSize: 14
+};
+
+const th = {
+  background: '#0D2240',
+  color: '#ffffff',
+  padding: '10px 12px',
+  textAlign: 'center',
+  whiteSpace: 'nowrap'
+};
+
+const thLeft = {
+  ...th,
+  textAlign: 'left'
+};
+
+const td = {
+  padding: '10px 12px',
+  color: '#0D2240'
+};
+
+const tdCenter = {
+  ...td,
+  textAlign: 'center'
+};
+
+const primaryButton = {
+  display: 'inline-block',
+  background: '#0D2240',
+  color: '#ffffff',
+  padding: '10px 16px',
+  borderRadius: 8,
+  cursor: 'pointer',
+  fontWeight: 600
+};
+
+const secondaryButton = {
+  background: '#e5e7eb',
+  color: '#111827',
+  padding: '10px 16px',
+  borderRadius: 8,
+  border: 'none',
+  cursor: 'pointer',
+  fontWeight: 600
+};
+
+const successBox = {
+  marginTop: 16,
+  padding: 12,
+  borderRadius: 8,
+  background: '#dcfce7',
+  color: '#166534'
+};
+
+const errorBox = {
+  marginTop: 16,
+  padding: 12,
+  borderRadius: 8,
+  background: '#fee2e2',
+  color: '#991b1b'
+};
+
+const infoBox = {
+  marginTop: 16,
+  padding: 12,
+  borderRadius: 8,
+  background: '#dbeafe',
+  color: '#1e3a8a'
 };
