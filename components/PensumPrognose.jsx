@@ -56,7 +56,7 @@ function beregnAllokering(likvid, pe, eiendom, profilNavn) {
 }
 
 const RAPPORT_DATO = '31.01.2026';
-const HISTORIKK_ARFELT = ['aar2024', 'aar2023', 'aar2022', 'aar2021', 'aar2020'];
+const HISTORIKK_ARFELT = ['aar2026', 'aar2025', 'aar2024', 'aar2023', 'aar2022'];
 
 function beregnProduktNokkeltall(produkt) {
   const gyldigeAvkastninger = HISTORIKK_ARFELT
@@ -472,7 +472,7 @@ export default function PensumPrognoseModell() {
   };
 
   // State for historikkdata og visning
-  const [produktHistorikk, setProduktHistorikk] = useState(defaultProduktHistorikk);
+  const [produktHistorikk, setProduktHistorikk] = useState(() => oppdaterHistorikkTilRapportDato(defaultProduktHistorikk));
   const [historikkPeriode, setHistorikkPeriode] = useState('5y'); // 1y, 3y, 5y, max
   const [valgteProdukterHistorikk, setValgteProdukterHistorikk] = useState(['global-core-active', 'global-edge', 'basis']);
   
@@ -1489,7 +1489,7 @@ export default function PensumPrognoseModell() {
     'financial-d': 'Financial Opportunities',
   };
 
-  const handleGeneratePDF = async () => {
+  const handleGeneratePresentation = async () => {
     setPdfLoading(true);
     try {
       const payload = {
@@ -1518,14 +1518,17 @@ export default function PensumPrognoseModell() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Pensum_Investeringsforslag_${(kundeNavn || 'Kunde').replace(/\s+/g, '_')}.pdf`;
+      const disposition = res.headers.get('content-disposition') || '';
+      const match = disposition.match(/filename=\"([^\"]+)\"/i);
+      const fallbackName = `Pensum_Investeringsforslag_${(kundeNavn || 'Kunde').replace(/\s+/g, '_')}.pptx`;
+      a.download = match ? match[1] : fallbackName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       setPdfModal(false);
     } catch (err) {
-      alert('Feil ved PDF-generering: ' + err.message);
+      alert('Feil ved generering av presentasjon: ' + err.message);
     } finally {
       setPdfLoading(false);
     }
@@ -1949,8 +1952,8 @@ export default function PensumPrognoseModell() {
               <div className="flex items-center gap-3">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                 <div>
-                  <h2 className="text-lg font-bold text-white">Generer investeringsforslag</h2>
-                  <p className="text-blue-300 text-sm mt-0.5">PDF med AI-generert rationale og eksponeringsdata</p>
+                  <h2 className="text-lg font-bold text-white">Generer investeringsforslag (PowerPoint)</h2>
+                  <p className="text-blue-300 text-sm mt-0.5">PowerPoint med allokering, produkter og malmetadata</p>
                 </div>
               </div>
             </div>
@@ -1998,7 +2001,7 @@ export default function PensumPrognoseModell() {
               {/* AI-info */}
               <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-xl border border-blue-100">
                 <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <p className="text-xs text-blue-700">Claude AI vil automatisk generere et skreddersydd investeringsrationale basert på kundens profil, kapitalnivå og porteføljesammensetning.</p>
+                <p className="text-xs text-blue-700">Presentasjonen genereres automatisk fra kundeinformasjon, allokering, valgte produkter og maloppsett.</p>
               </div>
             </div>
 
@@ -2008,18 +2011,18 @@ export default function PensumPrognoseModell() {
                 className="flex-1 py-2.5 px-4 rounded-xl text-sm font-medium border border-gray-200 hover:bg-gray-50 disabled:opacity-50">
                 Avbryt
               </button>
-              <button onClick={handleGeneratePDF} disabled={pdfLoading}
+              <button onClick={handleGeneratePresentation} disabled={pdfLoading}
                 className="flex-2 py-2.5 px-6 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-60 min-w-[180px]"
                 style={{ backgroundColor: pdfLoading ? '#6B7280' : '#D4886B' }}>
                 {pdfLoading ? (
                   <>
                     <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    Genererer PDF...
+                    Genererer PowerPoint...
                   </>
                 ) : (
                   <>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                    Last ned PDF
+                    Last ned PowerPoint
                   </>
                 )}
               </button>
@@ -3057,7 +3060,7 @@ export default function PensumPrognoseModell() {
                     {/* Disclaimer */}
                     <div className="mt-4 text-xs text-gray-500 p-3 bg-gray-50 rounded-lg">
                       <strong>Viktig informasjon om avkastning:</strong> Historikk er indeksert til 100 ved start av valgt periode. 
-                      For flere produkter er historikk før oppstart estimert - se produktdetaljer for mer informasjon. 
+                      Historikk er oppdatert til og med 31.01.2026 (2026 vises som YTD). For flere produkter er historikk før oppstart estimert - se produktdetaljer for mer informasjon. 
                       Historisk avkastning er ingen garanti for fremtidig avkastning.
                     </div>
                   </div>
@@ -3951,13 +3954,14 @@ export default function PensumPrognoseModell() {
                     <div className="bg-blue-50 rounded-lg p-4 mb-4">
                       <p className="text-sm font-medium text-blue-800 mb-2">Forventet format:</p>
                       <p className="text-xs text-blue-700">Kolonne A: Produkt-ID (f.eks. "globale-aksjer")</p>
-                      <p className="text-xs text-blue-700">Kolonne B: 2024</p>
-                      <p className="text-xs text-blue-700">Kolonne C: 2023</p>
-                      <p className="text-xs text-blue-700">Kolonne D: 2022</p>
-                      <p className="text-xs text-blue-700">Kolonne E: 2021</p>
-                      <p className="text-xs text-blue-700">Kolonne F: 2020</p>
+                      <p className="text-xs text-blue-700">Kolonne B: 2026 (YTD)</p>
+                      <p className="text-xs text-blue-700">Kolonne C: 2025</p>
+                      <p className="text-xs text-blue-700">Kolonne D: 2024</p>
+                      <p className="text-xs text-blue-700">Kolonne E: 2023</p>
+                      <p className="text-xs text-blue-700">Kolonne F: 2022</p>
                       <p className="text-xs text-blue-700">Kolonne G: Årlig 3 år</p>
                       <p className="text-xs text-blue-700">Kolonne H: Risiko 3 år</p>
+                      <p className="text-xs text-blue-700 mt-1">Tips: Du kan også bruke header-navn (id, 2026, 2025, 2024, 2023, 2022, aarlig3ar, risiko3ar) i vilkårlig kolonnerekkefølge.</p>
                     </div>
                     <div className="flex gap-4">
                       <label className="flex-1">
@@ -3980,24 +3984,53 @@ export default function PensumPrognoseModell() {
                             const oppdaterteProdukter = { ...pensumProdukter };
                             let oppdatert = 0;
                             
-                            json.slice(1).forEach(row => {
-                              if (!row[0]) return;
-                              const id = row[0].toString().toLowerCase().trim();
-                              
-                              // Finn produktet i alle kategorier
+                            const header = (json[0] || []).map((h) => String(h || '').toLowerCase().trim());
+                            const harHeader = header.includes('id') || header.includes('produkt-id') || header.includes('produkt_id');
+
+                            const finnKolonne = (muligeNavn, fallbackIndex) => {
+                              for (const navn of muligeNavn) {
+                                const idx = header.indexOf(navn);
+                                if (idx >= 0) return idx;
+                              }
+                              return fallbackIndex;
+                            };
+
+                            const col = {
+                              id: finnKolonne(['id', 'produkt-id', 'produkt_id'], 0),
+                              aar2026: finnKolonne(['2026', '2026 ytd', 'aar2026'], 1),
+                              aar2025: finnKolonne(['2025', 'aar2025'], 2),
+                              aar2024: finnKolonne(['2024', 'aar2024'], 3),
+                              aar2023: finnKolonne(['2023', 'aar2023'], 4),
+                              aar2022: finnKolonne(['2022', 'aar2022'], 5),
+                              aarlig3ar: finnKolonne(['aarlig3ar', 'årlig 3 år', 'aarlig 3 aar'], 6),
+                              risiko3ar: finnKolonne(['risiko3ar', 'risiko 3 år', 'risiko 3 aar'], 7)
+                            };
+
+                            const startRad = harHeader ? 1 : 0;
+                            json.slice(startRad).forEach(row => {
+                              const idVerdi = row[col.id];
+                              if (!idVerdi) return;
+                              const id = idVerdi.toString().toLowerCase().trim();
+
+                              const lesTall = (feltNavn) => {
+                                const idx = col[feltNavn];
+                                if (idx === undefined || idx < 0) return undefined;
+                                const v = row[idx];
+                                if (v === undefined || v === '') return null;
+                                const num = parseFloat(v);
+                                return Number.isFinite(num) ? num : null;
+                              };
+
                               ['enkeltfond', 'fondsportefoljer', 'alternative'].forEach(kategori => {
                                 const idx = oppdaterteProdukter[kategori].findIndex(p => p.id === id);
                                 if (idx >= 0) {
-                                  oppdaterteProdukter[kategori][idx] = {
-                                    ...oppdaterteProdukter[kategori][idx],
-                                    aar2024: row[1] !== undefined && row[1] !== '' ? parseFloat(row[1]) : null,
-                                    aar2023: row[2] !== undefined && row[2] !== '' ? parseFloat(row[2]) : null,
-                                    aar2022: row[3] !== undefined && row[3] !== '' ? parseFloat(row[3]) : null,
-                                    aar2021: row[4] !== undefined && row[4] !== '' ? parseFloat(row[4]) : null,
-                                    aar2020: row[5] !== undefined && row[5] !== '' ? parseFloat(row[5]) : null,
-                                    aarlig3ar: row[6] !== undefined && row[6] !== '' ? parseFloat(row[6]) : null,
-                                    risiko3ar: row[7] !== undefined && row[7] !== '' ? parseFloat(row[7]) : null
-                                  };
+                                  const eksisterende = oppdaterteProdukter[kategori][idx];
+                                  const neste = { ...eksisterende };
+                                  ['aar2026','aar2025','aar2024','aar2023','aar2022','aarlig3ar','risiko3ar'].forEach((felt) => {
+                                    const verdi = lesTall(felt);
+                                    if (verdi !== undefined) neste[felt] = verdi;
+                                  });
+                                  oppdaterteProdukter[kategori][idx] = neste;
                                   oppdatert++;
                                 }
                               });
@@ -4006,9 +4039,7 @@ export default function PensumPrognoseModell() {
                             setPensumProdukter(oppdaterteProdukter);
                             
                             // Lagre til storage
-                            if (typeof window !== 'undefined' && window.storage && window.storage.set) {
-                              await window.storage.set('pensum_admin_produkter', JSON.stringify(oppdaterteProdukter));
-                            }
+                            await storageSet('pensum_admin_produkter', JSON.stringify(oppdaterteProdukter));
                             
                             setAdminMelding('Oppdaterte ' + oppdatert + ' produkter fra Excel-filen.');
                           } catch (err) {
@@ -4021,11 +4052,11 @@ export default function PensumPrognoseModell() {
                       <button 
                         onClick={() => {
                           // Eksporter mal
-                          const header = ['id', '2024', '2023', '2022', '2021', '2020', 'aarlig3ar', 'risiko3ar'];
+                          const header = ['id', '2026', '2025', '2024', '2023', '2022', 'aarlig3ar', 'risiko3ar'];
                           const rows = [header];
                           ['enkeltfond', 'fondsportefoljer', 'alternative'].forEach(kat => {
                             pensumProdukter[kat].forEach(p => {
-                              rows.push([p.id, p.aar2024 || '', p.aar2023 || '', p.aar2022 || '', p.aar2021 || '', p.aar2020 || '', p.aarlig3ar || '', p.risiko3ar || '']);
+                              rows.push([p.id, p.aar2026 || '', p.aar2025 || '', p.aar2024 || '', p.aar2023 || '', p.aar2022 || '', p.aarlig3ar || '', p.risiko3ar || '']);
                             });
                           });
                           const csv = rows.map(r => r.join(';')).join('\n');
@@ -4081,10 +4112,8 @@ export default function PensumPrognoseModell() {
                     <button 
                       onClick={async () => {
                         try {
-                          if (typeof window !== 'undefined' && window.storage && window.storage.set) {
-                            await window.storage.set('pensum_admin_avkastningsrater', JSON.stringify(avkastningsrater));
-                            setAdminMelding('Avkastningsrater lagret!');
-                          }
+                          await storageSet('pensum_admin_avkastningsrater', JSON.stringify(avkastningsrater));
+                          setAdminMelding('Avkastningsrater lagret!');
                         } catch (err) {
                           setAdminMelding('Feil ved lagring: ' + err.message);
                         }
@@ -4106,6 +4135,8 @@ export default function PensumPrognoseModell() {
                       <thead>
                         <tr style={{ backgroundColor: PENSUM_COLORS.lightGray }}>
                           <th className="py-2 px-3 text-left">Produkt</th>
+                          <th className="py-2 px-3 text-right">2026 YTD</th>
+                          <th className="py-2 px-3 text-right">2025</th>
                           <th className="py-2 px-3 text-right">2024</th>
                           <th className="py-2 px-3 text-right">2023</th>
                           <th className="py-2 px-3 text-right">2022</th>
@@ -4118,7 +4149,7 @@ export default function PensumPrognoseModell() {
                           pensumProdukter[kategori].map((produkt, idx) => (
                             <tr key={produkt.id} className="border-b border-gray-100">
                               <td className="py-2 px-3 font-medium" style={{ color: PENSUM_COLORS.darkBlue }}>{produkt.navn}</td>
-                              {['aar2024', 'aar2023', 'aar2022', 'aarlig3ar', 'risiko3ar'].map(felt => (
+                              {['aar2026', 'aar2025', 'aar2024', 'aar2023', 'aar2022', 'aarlig3ar', 'risiko3ar'].map(felt => (
                                 <td key={felt} className="py-2 px-3">
                                   <input 
                                     type="number" 
@@ -4144,10 +4175,8 @@ export default function PensumPrognoseModell() {
                     <button 
                       onClick={async () => {
                         try {
-                          if (typeof window !== 'undefined' && window.storage && window.storage.set) {
-                            await window.storage.set('pensum_admin_produkter', JSON.stringify(pensumProdukter));
-                            setAdminMelding('Produktdata lagret!');
-                          }
+                          await storageSet('pensum_admin_produkter', JSON.stringify(pensumProdukter));
+                          setAdminMelding('Produktdata lagret!');
                         } catch (err) {
                           setAdminMelding('Feil ved lagring: ' + err.message);
                         }
@@ -4340,10 +4369,9 @@ export default function PensumPrognoseModell() {
                           investmentGrade: 5, privateEquity: 15, eiendom: 8
                         });
                         try {
-                          if (typeof window !== 'undefined' && window.storage) {
-                            await window.storage.delete('pensum_admin_produkter');
-                            await window.storage.delete('pensum_admin_avkastningsrater');
-                          }
+                          await storageDelete('pensum_admin_produkter');
+                          await storageDelete('pensum_admin_avkastningsrater');
+                          await storageDelete('pensum_admin_pdf_mal');
                         } catch (e) {}
                         setAdminMelding('Data tilbakestilt til standardverdier.');
                       }}
