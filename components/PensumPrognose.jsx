@@ -55,6 +55,79 @@ function beregnAllokering(likvid, pe, eiendom, profilNavn) {
   ];
 }
 
+const RAPPORT_DATO = '31.01.2026';
+const HISTORIKK_ARFELT = ['aar2024', 'aar2023', 'aar2022', 'aar2021', 'aar2020'];
+
+function beregnProduktNokkeltall(produkt) {
+  const gyldigeAvkastninger = HISTORIKK_ARFELT
+    .map((felt) => produkt[felt])
+    .filter((verdi) => typeof verdi === 'number' && Number.isFinite(verdi))
+    .slice(0, 3);
+
+  if (gyldigeAvkastninger.length < 3) {
+    return {
+      aarlig3ar: produkt.aarlig3ar,
+      risiko3ar: produkt.risiko3ar
+    };
+  }
+
+  const vekstfaktor = gyldigeAvkastninger.reduce((acc, verdi) => acc * (1 + (verdi / 100)), 1);
+  const annualisert = (Math.pow(vekstfaktor, 1 / gyldigeAvkastninger.length) - 1) * 100;
+  const snitt = gyldigeAvkastninger.reduce((sum, verdi) => sum + verdi, 0) / gyldigeAvkastninger.length;
+  const varians = gyldigeAvkastninger.reduce((sum, verdi) => sum + Math.pow(verdi - snitt, 2), 0) / gyldigeAvkastninger.length;
+
+  return {
+    aarlig3ar: parseFloat(annualisert.toFixed(1)),
+    risiko3ar: parseFloat(Math.sqrt(varians).toFixed(1))
+  };
+}
+
+function validerSiderFormat(tekst) {
+  if (!tekst || !tekst.trim()) return false;
+  const biter = tekst.split(',').map((b) => b.trim()).filter(Boolean);
+  if (biter.length === 0) return false;
+  return biter.every((bit) => /^(\d+|\d+-\d+|\d+\+)$/.test(bit));
+}
+
+
+const RAPPORT_MAANED = '2026-01';
+const HISTORIKK_2026_YTD = {
+  'global-core-active': -2.0,
+  'global-edge': 0.6,
+  'basis': -0.1,
+  'global-hoyrente': 0.7,
+  'nordisk-hoyrente': 0.6,
+  'norge-a': 2.2,
+  'energy-a': 7.8,
+  'banking-d': -1.1,
+  'financial-d': 0.9
+};
+
+function oppdaterHistorikkTilRapportDato(historikkMap) {
+  const oppdatert = {};
+  Object.entries(historikkMap || {}).forEach(([id, historikk]) => {
+    const originalData = Array.isArray(historikk?.data) ? historikk.data : [];
+    const harRapportMaaned = originalData.some((punkt) => punkt.dato === RAPPORT_MAANED);
+
+    if (harRapportMaaned || originalData.length === 0) {
+      oppdatert[id] = historikk;
+      return;
+    }
+
+    const sistePunkt = originalData[originalData.length - 1];
+    const ytd = HISTORIKK_2026_YTD[id];
+    const faktor = typeof ytd === 'number' ? (1 + (ytd / 100)) : 1;
+    const nyVerdi = parseFloat((sistePunkt.verdi * faktor).toFixed(2));
+
+    oppdatert[id] = {
+      ...historikk,
+      data: [...originalData, { dato: RAPPORT_MAANED, verdi: nyVerdi }]
+    };
+  });
+
+  return oppdatert;
+}
+
 const DEFAULT_LIKVID = 8000000;  // 3 mill aksjefond + 1 mill aksjer + 2 mill renter + 2 mill kontanter
 const DEFAULT_PE = 1000000;
 const DEFAULT_EIENDOM = 1000000;
@@ -438,7 +511,7 @@ export default function PensumPrognoseModell() {
   };
 
   // State for historikkdata og visning
-  const [produktHistorikk, setProduktHistorikk] = useState(defaultProduktHistorikk);
+  const [produktHistorikk, setProduktHistorikk] = useState(() => oppdaterHistorikkTilRapportDato(defaultProduktHistorikk));
   const [historikkPeriode, setHistorikkPeriode] = useState('5y'); // 1y, 3y, 5y, max
   const [valgteProdukterHistorikk, setValgteProdukterHistorikk] = useState(['global-core-active', 'global-edge', 'basis']);
   
@@ -452,6 +525,52 @@ export default function PensumPrognoseModell() {
   const [erAdmin, setErAdmin] = useState(false);
   const [adminMelding, setAdminMelding] = useState('');
   const ADMIN_PASSORD = 'pensum2024'; // Enkelt passord - kan endres
+
+  const storageGet = async (key) => {
+    if (typeof window === 'undefined') return null;
+    if (window.storage && window.storage.get) {
+      const result = await window.storage.get(key);
+      return result && result.value ? result.value : null;
+    }
+    return window.localStorage.getItem(key);
+  };
+
+  const storageSet = async (key, value) => {
+    if (typeof window === 'undefined') return false;
+    if (window.storage && window.storage.set) {
+      await window.storage.set(key, value);
+      return true;
+    }
+    window.localStorage.setItem(key, value);
+    return true;
+  };
+
+  const storageDelete = async (key) => {
+    if (typeof window === 'undefined') return false;
+    if (window.storage && window.storage.delete) {
+      await window.storage.delete(key);
+      return true;
+    }
+    window.localStorage.removeItem(key);
+    return true;
+  };
+  const [pdfMalConfig, setPdfMalConfig] = useState({
+    navn: '',
+    filnavn: '',
+    filtype: '',
+    filDataUrl: '',
+    fasteSider: '1-3,10+',
+    dynamiskeSider: '4-9',
+    dynamiskBeskrivelse: 'Side 4: Porteføljen i dag\nSide 5: Aksjeandel vs verdensindeks\nSide 6: Verdensindeksen\nSide 7: Pensums porteføljeforslag\nSide 8: Avkastning\nSide 9: Risiko og månedstabeller'
+  });
+  const erGyldigFasteSider = useMemo(() => validerSiderFormat(pdfMalConfig.fasteSider), [pdfMalConfig.fasteSider]);
+  const erGyldigDynamiskeSider = useMemo(() => validerSiderFormat(pdfMalConfig.dynamiskeSider), [pdfMalConfig.dynamiskeSider]);
+  const erKlarForLagringAvMal = useMemo(() => (
+    Boolean(pdfMalConfig.navn.trim()) &&
+    Boolean(pdfMalConfig.filnavn) &&
+    erGyldigFasteSider &&
+    erGyldigDynamiskeSider
+  ), [pdfMalConfig, erGyldigFasteSider, erGyldigDynamiskeSider]);
   
   // Standard avkastningsrater (kan endres av admin)
   const [avkastningsrater, setAvkastningsrater] = useState({
@@ -467,17 +586,19 @@ export default function PensumPrognoseModell() {
   useEffect(() => {
     const lastAdminData = async () => {
       try {
-        if (typeof window !== 'undefined' && window.storage && window.storage.get) {
-          // Last avkastningsrater
-          const raterResult = await window.storage.get('pensum_admin_avkastningsrater');
-          if (raterResult && raterResult.value) {
-            setAvkastningsrater(JSON.parse(raterResult.value));
-          }
-          // Last produktdata
-          const produktResult = await window.storage.get('pensum_admin_produkter');
-          if (produktResult && produktResult.value) {
-            setPensumProdukter(JSON.parse(produktResult.value));
-          }
+        const raterValue = await storageGet('pensum_admin_avkastningsrater');
+        if (raterValue) {
+          setAvkastningsrater(JSON.parse(raterValue));
+        }
+
+        const produktValue = await storageGet('pensum_admin_produkter');
+        if (produktValue) {
+          setPensumProdukter(JSON.parse(produktValue));
+        }
+
+        const malValue = await storageGet('pensum_admin_pdf_mal');
+        if (malValue) {
+          setPdfMalConfig(JSON.parse(malValue));
         }
       } catch (e) {
         console.log('Kunne ikke laste admin-data:', e);
@@ -586,7 +707,7 @@ export default function PensumPrognoseModell() {
   // Beregn vektet historisk avkastning
   const beregnPensumHistorikk = useMemo(() => {
     const alleProdukt = [...pensumProdukter.enkeltfond, ...pensumProdukter.fondsportefoljer, ...pensumProdukter.alternative];
-    const aarKolonner = ['aar2024', 'aar2023', 'aar2022', 'aar2021', 'aar2020'];
+    const aarKolonner = HISTORIKK_ARFELT;
     const resultat = {};
     
     aarKolonner.forEach(aar => {
@@ -670,7 +791,8 @@ export default function PensumPrognoseModell() {
       const produkt = alleProdukt.find(p => p.id === allok.id);
       if (produkt && allok.vekt > 0) {
         // Bruk 3-års annualisert eller forventet avkastning
-        const avkastning = produkt.aarlig3ar || produkt.forventetAvkastning || produkt.aar2024 || 0;
+        const nokkeltall = beregnProduktNokkeltall(produkt);
+        const avkastning = nokkeltall.aarlig3ar || produkt.forventetAvkastning || produkt.aar2024 || 0;
         vektetSum += avkastning * allok.vekt;
         totalVekt += allok.vekt;
       }
@@ -1432,7 +1554,7 @@ export default function PensumPrognoseModell() {
     'financial-d': 'Financial Opportunities',
   };
 
-  const handleGeneratePDF = async () => {
+  const handleGeneratePresentation = async () => {
     setPdfLoading(true);
     try {
       const payload = {
@@ -1443,6 +1565,13 @@ export default function PensumPrognoseModell() {
         vektetAvkastning,
         allokering: aktiveAktiva,
         produkterIBruk: pdfProduktValg.length > 0 ? pdfProduktValg : Object.keys(PRODUKT_NAVN_MAP_PDF),
+        malConfig: {
+          navn: pdfMalConfig.navn,
+          filnavn: pdfMalConfig.filnavn,
+          fasteSider: pdfMalConfig.fasteSider,
+          dynamiskeSider: pdfMalConfig.dynamiskeSider,
+          dynamiskBeskrivelse: pdfMalConfig.dynamiskBeskrivelse
+        }
       };
       const res = await fetch('/api/generate-pdf', {
         method: 'POST',
@@ -1454,14 +1583,17 @@ export default function PensumPrognoseModell() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `Pensum_Investeringsforslag_${(kundeNavn || 'Kunde').replace(/\s+/g, '_')}.pdf`;
+      const disposition = res.headers.get('content-disposition') || '';
+      const match = disposition.match(/filename=\"([^\"]+)\"/i);
+      const fallbackName = `Pensum_Investeringsforslag_${(kundeNavn || 'Kunde').replace(/\s+/g, '_')}.pptx`;
+      a.download = match ? match[1] : fallbackName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
       setPdfModal(false);
     } catch (err) {
-      alert('Feil ved PDF-generering: ' + err.message);
+      alert('Feil ved generering av presentasjon: ' + err.message);
     } finally {
       setPdfLoading(false);
     }
@@ -1859,8 +1991,8 @@ export default function PensumPrognoseModell() {
                         {valgtProduktDetalj.aar2024 !== null && <div className="text-center p-3 bg-gray-50 rounded-lg"><span className="text-xs text-gray-500 block">2024</span><span className={"text-lg font-bold " + (valgtProduktDetalj.aar2024 >= 0 ? "text-green-600" : "text-red-600")}>{valgtProduktDetalj.aar2024 > 0 ? '+' : ''}{valgtProduktDetalj.aar2024}%</span></div>}
                         {valgtProduktDetalj.aar2023 !== null && <div className="text-center p-3 bg-gray-50 rounded-lg"><span className="text-xs text-gray-500 block">2023</span><span className={"text-lg font-bold " + (valgtProduktDetalj.aar2023 >= 0 ? "text-green-600" : "text-red-600")}>{valgtProduktDetalj.aar2023 > 0 ? '+' : ''}{valgtProduktDetalj.aar2023}%</span></div>}
                         {valgtProduktDetalj.aar2022 !== null && <div className="text-center p-3 bg-gray-50 rounded-lg"><span className="text-xs text-gray-500 block">2022</span><span className={"text-lg font-bold " + (valgtProduktDetalj.aar2022 >= 0 ? "text-green-600" : "text-red-600")}>{valgtProduktDetalj.aar2022 > 0 ? '+' : ''}{valgtProduktDetalj.aar2022}%</span></div>}
-                        {valgtProduktDetalj.aarlig3ar !== null && <div className="text-center p-3 bg-blue-50 rounded-lg border border-blue-200"><span className="text-xs text-blue-600 block">Årlig 3 år</span><span className={"text-lg font-bold " + (valgtProduktDetalj.aarlig3ar >= 0 ? "text-green-600" : "text-red-600")}>{valgtProduktDetalj.aarlig3ar > 0 ? '+' : ''}{valgtProduktDetalj.aarlig3ar}%</span></div>}
-                        {valgtProduktDetalj.risiko3ar !== null && <div className="text-center p-3 bg-gray-50 rounded-lg"><span className="text-xs text-gray-500 block">Risiko 3 år</span><span className="text-lg font-bold text-gray-700">{valgtProduktDetalj.risiko3ar}%</span></div>}
+                        {(() => { const nokkeltall = beregnProduktNokkeltall(valgtProduktDetalj); return nokkeltall.aarlig3ar !== null && <div className="text-center p-3 bg-blue-50 rounded-lg border border-blue-200"><span className="text-xs text-blue-600 block">Årlig 3 år (beregnet)</span><span className={"text-lg font-bold " + (nokkeltall.aarlig3ar >= 0 ? "text-green-600" : "text-red-600")}>{nokkeltall.aarlig3ar > 0 ? '+' : ''}{nokkeltall.aarlig3ar}%</span></div>; })()}
+                        {(() => { const nokkeltall = beregnProduktNokkeltall(valgtProduktDetalj); return nokkeltall.risiko3ar !== null && <div className="text-center p-3 bg-gray-50 rounded-lg"><span className="text-xs text-gray-500 block">Risiko 3 år (beregnet)</span><span className="text-lg font-bold text-gray-700">{nokkeltall.risiko3ar}%</span></div>; })()}
                       </div>
                     </div>
                   </div>
@@ -1885,8 +2017,8 @@ export default function PensumPrognoseModell() {
               <div className="flex items-center gap-3">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
                 <div>
-                  <h2 className="text-lg font-bold text-white">Generer investeringsforslag</h2>
-                  <p className="text-blue-300 text-sm mt-0.5">PDF med AI-generert rationale og eksponeringsdata</p>
+                  <h2 className="text-lg font-bold text-white">Generer investeringsforslag (PowerPoint)</h2>
+                  <p className="text-blue-300 text-sm mt-0.5">PowerPoint med allokering, produkter og malmetadata</p>
                 </div>
               </div>
             </div>
@@ -1934,7 +2066,7 @@ export default function PensumPrognoseModell() {
               {/* AI-info */}
               <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-xl border border-blue-100">
                 <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <p className="text-xs text-blue-700">Claude AI vil automatisk generere et skreddersydd investeringsrationale basert på kundens profil, kapitalnivå og porteføljesammensetning.</p>
+                <p className="text-xs text-blue-700">Presentasjonen genereres automatisk fra kundeinformasjon, allokering, valgte produkter og maloppsett.</p>
               </div>
             </div>
 
@@ -1944,18 +2076,18 @@ export default function PensumPrognoseModell() {
                 className="flex-1 py-2.5 px-4 rounded-xl text-sm font-medium border border-gray-200 hover:bg-gray-50 disabled:opacity-50">
                 Avbryt
               </button>
-              <button onClick={handleGeneratePDF} disabled={pdfLoading}
+              <button onClick={handleGeneratePresentation} disabled={pdfLoading}
                 className="flex-2 py-2.5 px-6 rounded-xl text-sm font-bold text-white flex items-center justify-center gap-2 hover:opacity-90 disabled:opacity-60 min-w-[180px]"
                 style={{ backgroundColor: pdfLoading ? '#6B7280' : '#D4886B' }}>
                 {pdfLoading ? (
                   <>
                     <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
-                    Genererer PDF...
+                    Genererer PowerPoint...
                   </>
                 ) : (
                   <>
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
-                    Last ned PDF
+                    Last ned PowerPoint
                   </>
                 )}
               </button>
@@ -2993,7 +3125,7 @@ export default function PensumPrognoseModell() {
                     {/* Disclaimer */}
                     <div className="mt-4 text-xs text-gray-500 p-3 bg-gray-50 rounded-lg">
                       <strong>Viktig informasjon om avkastning:</strong> Historikk er indeksert til 100 ved start av valgt periode. 
-                      For flere produkter er historikk før oppstart estimert - se produktdetaljer for mer informasjon. 
+                      Historikk er oppdatert til og med 31.01.2026 (2026 vises som YTD). For flere produkter er historikk før oppstart estimert - se produktdetaljer for mer informasjon. 
                       Historisk avkastning er ingen garanti for fremtidig avkastning.
                     </div>
                   </div>
@@ -3026,8 +3158,7 @@ export default function PensumPrognoseModell() {
                           <td className={"py-2 px-3 text-right " + (p.aar2022 === null ? 'text-gray-400' : p.aar2022 >= 0 ? 'text-green-600' : 'text-red-600')}>{p.aar2022 !== null ? p.aar2022.toFixed(1) + '%' : '—'}</td>
                           <td className={"py-2 px-3 text-right " + (p.aar2021 === null ? 'text-gray-400' : p.aar2021 >= 0 ? 'text-green-600' : 'text-red-600')}>{p.aar2021 !== null ? p.aar2021.toFixed(1) + '%' : '—'}</td>
                           <td className={"py-2 px-3 text-right " + (p.aar2020 === null ? 'text-gray-400' : p.aar2020 >= 0 ? 'text-green-600' : 'text-red-600')}>{p.aar2020 !== null ? p.aar2020.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (p.aarlig3ar === null ? 'text-gray-400' : p.aarlig3ar >= 0 ? 'text-green-600' : 'text-red-600')}>{p.aarlig3ar !== null ? p.aarlig3ar.toFixed(1) + '%' : '—'}</td>
-                          <td className="py-2 px-3 text-right text-gray-600">{p.risiko3ar !== null ? p.risiko3ar.toFixed(1) + '%' : '—'}</td>
+                          {(() => { const nokkeltall = beregnProduktNokkeltall(p); return <><td className={"py-2 px-3 text-right " + (nokkeltall.aarlig3ar === null ? 'text-gray-400' : nokkeltall.aarlig3ar >= 0 ? 'text-green-600' : 'text-red-600')}>{nokkeltall.aarlig3ar !== null ? nokkeltall.aarlig3ar.toFixed(1) + '%' : '—'}</td><td className="py-2 px-3 text-right text-gray-600">{nokkeltall.risiko3ar !== null ? nokkeltall.risiko3ar.toFixed(1) + '%' : '—'}</td></>; })()}
                         </tr>
                       ))}
                       <tr className="bg-gray-100">
@@ -3041,8 +3172,7 @@ export default function PensumPrognoseModell() {
                           <td className={"py-2 px-3 text-right " + (p.aar2022 === null ? 'text-gray-400' : p.aar2022 >= 0 ? 'text-green-600' : 'text-red-600')}>{p.aar2022 !== null ? p.aar2022.toFixed(1) + '%' : '—'}</td>
                           <td className={"py-2 px-3 text-right " + (p.aar2021 === null ? 'text-gray-400' : p.aar2021 >= 0 ? 'text-green-600' : 'text-red-600')}>{p.aar2021 !== null ? p.aar2021.toFixed(1) + '%' : '—'}</td>
                           <td className={"py-2 px-3 text-right " + (p.aar2020 === null ? 'text-gray-400' : p.aar2020 >= 0 ? 'text-green-600' : 'text-red-600')}>{p.aar2020 !== null ? p.aar2020.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (p.aarlig3ar === null ? 'text-gray-400' : p.aarlig3ar >= 0 ? 'text-green-600' : 'text-red-600')}>{p.aarlig3ar !== null ? p.aarlig3ar.toFixed(1) + '%' : '—'}</td>
-                          <td className="py-2 px-3 text-right text-gray-600">{p.risiko3ar !== null ? p.risiko3ar.toFixed(1) + '%' : '—'}</td>
+                          {(() => { const nokkeltall = beregnProduktNokkeltall(p); return <><td className={"py-2 px-3 text-right " + (nokkeltall.aarlig3ar === null ? 'text-gray-400' : nokkeltall.aarlig3ar >= 0 ? 'text-green-600' : 'text-red-600')}>{nokkeltall.aarlig3ar !== null ? nokkeltall.aarlig3ar.toFixed(1) + '%' : '—'}</td><td className="py-2 px-3 text-right text-gray-600">{nokkeltall.risiko3ar !== null ? nokkeltall.risiko3ar.toFixed(1) + '%' : '—'}</td></>; })()}
                         </tr>
                       ))}
                       {visAlternative && (
@@ -3069,7 +3199,7 @@ export default function PensumPrognoseModell() {
                 </div>
 
                 <div className="mt-4 text-xs text-gray-500 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                  <strong>Viktig informasjon:</strong> Historisk avkastning er ingen garanti for fremtidig avkastning. Avkastningen kan bli negativ som følge av kurstap. Avkastning for enkeltfond er netto etter alle løpende kostnader. Avkastning for fondsporteføljer er beregnet etter et kostnadsestimat på 1,2% per år. Alternative investeringer har begrenset likviditet og lang bindingstid.
+                  <strong>Viktig informasjon:</strong> Historisk avkastning er ingen garanti for fremtidig avkastning. Nøkkeltall for Årlig 3 år og Risiko 3 år beregnes automatisk fra siste tilgjengelige tre kalenderår der data finnes. Avkastningen kan bli negativ som følge av kurstap. Avkastning for enkeltfond er netto etter alle løpende kostnader. Avkastning for fondsporteføljer er beregnet etter et kostnadsestimat på 1,2% per år. Alternative investeringer har begrenset likviditet og lang bindingstid.
                 </div>
               </div>
             </div>
@@ -3340,14 +3470,14 @@ export default function PensumPrognoseModell() {
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-4" style={{ backgroundColor: PENSUM_COLORS.darkBlue }}>
                   <h3 className="text-lg font-semibold text-white">Årsavkastning</h3>
-                  <p className="text-blue-300 text-sm mt-0.5">Kalenderårsavkastning for alle Pensum-løsninger</p>
+                  <p className="text-blue-300 text-sm mt-0.5">Kalenderårsavkastning for alle Pensum-løsninger (2026 = YTD per {RAPPORT_DATO})</p>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="bg-gray-50">
                         <th className="py-3 px-4 text-left font-semibold text-gray-600 w-40 sticky left-0 bg-gray-50 z-10">Produkt</th>
-                        {AAR_KOLONNER.map(a => <th key={a} className="py-3 px-2 text-center font-semibold text-gray-600 min-w-[56px]">{a}</th>)}
+                        {AAR_KOLONNER.map(a => <th key={a} className="py-3 px-2 text-center font-semibold text-gray-600 min-w-[56px]">{a === 2026 ? '2026 YTD' : a}</th>)}
                       </tr>
                     </thead>
                     <tbody>
@@ -3385,14 +3515,14 @@ export default function PensumPrognoseModell() {
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                 <div className="px-6 py-4" style={{ backgroundColor: PENSUM_COLORS.darkBlue }}>
                   <h3 className="text-lg font-semibold text-white">Referanseindekser</h3>
-                  <p className="text-blue-300 text-sm mt-0.5">Kalenderårsavkastning for utvalgte indekser</p>
+                  <p className="text-blue-300 text-sm mt-0.5">Kalenderårsavkastning for utvalgte indekser (2026 = YTD per {RAPPORT_DATO})</p>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="bg-gray-50">
                         <th className="py-3 px-4 text-left font-semibold text-gray-600 w-44 sticky left-0 bg-gray-50 z-10">Indeks</th>
-                        {AAR_KOLONNER.map(a => <th key={a} className="py-3 px-2 text-center font-semibold text-gray-600 min-w-[56px]">{a}</th>)}
+                        {AAR_KOLONNER.map(a => <th key={a} className="py-3 px-2 text-center font-semibold text-gray-600 min-w-[56px]">{a === 2026 ? '2026 YTD' : a}</th>)}
                       </tr>
                     </thead>
                     <tbody>
@@ -3425,7 +3555,7 @@ export default function PensumPrognoseModell() {
                   </table>
                 </div>
                 <div className="px-4 py-3 bg-amber-50 border-t border-amber-100 text-xs text-amber-700">
-                  Historisk avkastning er ingen garanti for fremtidig avkastning. 2025/2026 er estimerte/delvise tall. Indeksdata i USD/EUR/JPY vil avvike fra NOK-avkastning.
+                  Historisk avkastning er ingen garanti for fremtidig avkastning. Tall er oppdatert til og med {RAPPORT_DATO}. 2026 er delvis år (YTD), og indeksdata i USD/EUR/JPY vil avvike fra NOK-avkastning.
                 </div>
               </div>
             </div>
@@ -3944,9 +4074,7 @@ export default function PensumPrognoseModell() {
                             setPensumProdukter(oppdaterteProdukter);
                             
                             // Lagre til storage
-                            if (typeof window !== 'undefined' && window.storage && window.storage.set) {
-                              await window.storage.set('pensum_admin_produkter', JSON.stringify(oppdaterteProdukter));
-                            }
+                            await storageSet('pensum_admin_produkter', JSON.stringify(oppdaterteProdukter));
                             
                             setAdminMelding('Oppdaterte ' + oppdatert + ' produkter fra Excel-filen.');
                           } catch (err) {
@@ -4019,10 +4147,8 @@ export default function PensumPrognoseModell() {
                     <button 
                       onClick={async () => {
                         try {
-                          if (typeof window !== 'undefined' && window.storage && window.storage.set) {
-                            await window.storage.set('pensum_admin_avkastningsrater', JSON.stringify(avkastningsrater));
-                            setAdminMelding('Avkastningsrater lagret!');
-                          }
+                          await storageSet('pensum_admin_avkastningsrater', JSON.stringify(avkastningsrater));
+                          setAdminMelding('Avkastningsrater lagret!');
                         } catch (err) {
                           setAdminMelding('Feil ved lagring: ' + err.message);
                         }
@@ -4082,10 +4208,8 @@ export default function PensumPrognoseModell() {
                     <button 
                       onClick={async () => {
                         try {
-                          if (typeof window !== 'undefined' && window.storage && window.storage.set) {
-                            await window.storage.set('pensum_admin_produkter', JSON.stringify(pensumProdukter));
-                            setAdminMelding('Produktdata lagret!');
-                          }
+                          await storageSet('pensum_admin_produkter', JSON.stringify(pensumProdukter));
+                          setAdminMelding('Produktdata lagret!');
                         } catch (err) {
                           setAdminMelding('Feil ved lagring: ' + err.message);
                         }
@@ -4094,6 +4218,165 @@ export default function PensumPrognoseModell() {
                     >
                       Lagre endringer
                     </button>
+                  </div>
+                </div>
+
+                {/* PDF-mal for investeringsforslag */}
+                <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                  <div className="px-6 py-4" style={{ backgroundColor: PENSUM_COLORS.darkBlue }}>
+                    <h3 className="text-lg font-semibold text-white">Investeringsforslag: malstyring</h3>
+                  </div>
+                  <div className="p-6 space-y-4">
+                    <p className="text-sm text-gray-600">
+                      Last opp en PowerPoint/PDF-mal i admin, og marker hvilke sider som er faste og dynamiske.
+                      Dette er grunnlaget for å få rapporten til å ligne presentasjonsmalen deres.
+                    </p>
+
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Malnavn</label>
+                        <input
+                          type="text"
+                          value={pdfMalConfig.navn}
+                          onChange={(e) => setPdfMalConfig(prev => ({ ...prev, navn: e.target.value }))}
+                          placeholder="f.eks. Pensum master 2026"
+                          className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Malfil</label>
+                        <label className="mt-1 block border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
+                          <p className="text-sm text-gray-600">Klikk for å velge .ppt/.pptx/.pdf</p>
+                          <p className="text-xs text-gray-400 mt-1">Maks 15 MB</p>
+                          <input
+                            type="file"
+                            accept=".ppt,.pptx,.pdf,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                            className="hidden"
+                            onChange={(e) => {
+                              const fil = e.target.files?.[0];
+                              if (!fil) return;
+                              const erGyldigType = /\.(ppt|pptx|pdf)$/i.test(fil.name);
+                              if (!erGyldigType) {
+                                setAdminMelding('Feil: Kun .ppt, .pptx eller .pdf støttes for malopplasting.');
+                                return;
+                              }
+                              if (fil.size > 15 * 1024 * 1024) {
+                                setAdminMelding('Feil: Malfilen er større enn 15 MB. Komprimer eller bruk en mindre fil.');
+                                return;
+                              }
+
+                              const reader = new FileReader();
+                              reader.onload = () => {
+                                setPdfMalConfig(prev => ({
+                                  ...prev,
+                                  filnavn: fil.name,
+                                  filtype: fil.type || 'application/octet-stream',
+                                  filDataUrl: typeof reader.result === 'string' ? reader.result : ''
+                                }));
+                                setAdminMelding('Mal lastet inn lokalt. Trykk "Lagre maloppsett" for å lagre i admin.');
+                              };
+                              reader.onerror = () => setAdminMelding('Feil ved lesing av malfil. Prøv på nytt.');
+                              reader.readAsDataURL(fil);
+                            }}
+                          />
+                        </label>
+                        {pdfMalConfig.filnavn && (
+                          <p className="text-xs text-gray-500 mt-2">
+                            Valgt fil: <strong>{pdfMalConfig.filnavn}</strong>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-4 text-xs">
+                      <div className={"rounded-lg p-2 border " + (erGyldigFasteSider ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200')}>
+                        Faste sider: {erGyldigFasteSider ? 'Gyldig format' : 'Ugyldig format'}
+                      </div>
+                      <div className={"rounded-lg p-2 border " + (erGyldigDynamiskeSider ? 'bg-green-50 text-green-700 border-green-200' : 'bg-amber-50 text-amber-700 border-amber-200')}>
+                        Dynamiske sider: {erGyldigDynamiskeSider ? 'Gyldig format' : 'Ugyldig format'}
+                      </div>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Faste sider</label>
+                        <input
+                          type="text"
+                          value={pdfMalConfig.fasteSider}
+                          onChange={(e) => setPdfMalConfig(prev => ({ ...prev, fasteSider: e.target.value }))}
+                          placeholder="f.eks. 1-3,10+"
+                          className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Dynamiske sider</label>
+                        <input
+                          type="text"
+                          value={pdfMalConfig.dynamiskeSider}
+                          onChange={(e) => setPdfMalConfig(prev => ({ ...prev, dynamiskeSider: e.target.value }))}
+                          placeholder="f.eks. 4-9"
+                          className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Hva skal fylles inn dynamisk?</label>
+                      <textarea
+                        value={pdfMalConfig.dynamiskBeskrivelse}
+                        onChange={(e) => setPdfMalConfig(prev => ({ ...prev, dynamiskBeskrivelse: e.target.value }))}
+                        rows={6}
+                        className="mt-1 w-full border border-gray-300 rounded-lg px-3 py-2"
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        disabled={!erKlarForLagringAvMal}
+                        onClick={async () => {
+                          if (!erKlarForLagringAvMal) {
+                            setAdminMelding('Feil: Fyll ut malnavn, velg malfil, og bruk gyldig sideformat (f.eks. 1-3,10+).');
+                            return;
+                          }
+                          try {
+                            await storageSet('pensum_admin_pdf_mal', JSON.stringify(pdfMalConfig));
+                            setAdminMelding('Malmapping lagret i admin (fallback til lokal lagring brukes hvis window.storage mangler).');
+                          } catch (err) {
+                            setAdminMelding('Feil ved lagring av maloppsett: ' + err.message);
+                          }
+                        }}
+                        className={"px-6 py-2 text-white rounded-lg font-medium " + (!erKlarForLagringAvMal ? 'opacity-60 cursor-not-allowed' : '')}
+                        style={{ backgroundColor: PENSUM_COLORS.darkBlue }}
+                      >
+                        Lagre maloppsett
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setPdfMalConfig({
+                            navn: '',
+                            filnavn: '',
+                            filtype: '',
+                            filDataUrl: '',
+                            fasteSider: '1-3,10+',
+                            dynamiskeSider: '4-9',
+                            dynamiskBeskrivelse: 'Side 4: Porteføljen i dag\nSide 5: Aksjeandel vs verdensindeks\nSide 6: Verdensindeksen\nSide 7: Pensums porteføljeforslag\nSide 8: Avkastning\nSide 9: Risiko og månedstabeller'
+                          });
+                          setAdminMelding('Maloppsett nullstilt lokalt (ikke lagret).');
+                        }}
+                        className="px-6 py-2 border border-gray-300 text-gray-700 rounded-lg font-medium hover:bg-gray-50"
+                      >
+                        Nullstill skjema
+                      </button>
+                    </div>
+
+                    <div className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg p-3">
+                      <strong>Status:</strong> Opplastet mal lagres nå i admin slik at du kan definere faste/dynamiske sider.
+                      Selve PDF-generatoren kan i neste steg bruke dette oppsettet til å rendere side 4–9 med kundespesifikt innhold.
+                    </div>
+                    <div className="text-xs text-gray-500">
+                      Gyldige sideformater: <code>1-3,10+</code>, <code>4-9</code>, <code>2,5,7</code>.
+                    </div>
                   </div>
                 </div>
 
@@ -4115,10 +4398,9 @@ export default function PensumPrognoseModell() {
                           investmentGrade: 5, privateEquity: 15, eiendom: 8
                         });
                         try {
-                          if (typeof window !== 'undefined' && window.storage) {
-                            await window.storage.delete('pensum_admin_produkter');
-                            await window.storage.delete('pensum_admin_avkastningsrater');
-                          }
+                          await storageDelete('pensum_admin_produkter');
+                          await storageDelete('pensum_admin_avkastningsrater');
+                          await storageDelete('pensum_admin_pdf_mal');
                         } catch (e) {}
                         setAdminMelding('Data tilbakestilt til standardverdier.');
                       }}
