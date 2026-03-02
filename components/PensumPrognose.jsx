@@ -89,45 +89,6 @@ function validerSiderFormat(tekst) {
   return biter.every((bit) => /^(\d+|\d+-\d+|\d+\+)$/.test(bit));
 }
 
-
-const RAPPORT_MAANED = '2026-01';
-const HISTORIKK_2026_YTD = {
-  'global-core-active': -2.0,
-  'global-edge': 0.6,
-  'basis': -0.1,
-  'global-hoyrente': 0.7,
-  'nordisk-hoyrente': 0.6,
-  'norge-a': 2.2,
-  'energy-a': 7.8,
-  'banking-d': -1.1,
-  'financial-d': 0.9
-};
-
-function oppdaterHistorikkTilRapportDato(historikkMap) {
-  const oppdatert = {};
-  Object.entries(historikkMap || {}).forEach(([id, historikk]) => {
-    const originalData = Array.isArray(historikk?.data) ? historikk.data : [];
-    const harRapportMaaned = originalData.some((punkt) => punkt.dato === RAPPORT_MAANED);
-
-    if (harRapportMaaned || originalData.length === 0) {
-      oppdatert[id] = historikk;
-      return;
-    }
-
-    const sistePunkt = originalData[originalData.length - 1];
-    const ytd = HISTORIKK_2026_YTD[id];
-    const faktor = typeof ytd === 'number' ? (1 + (ytd / 100)) : 1;
-    const nyVerdi = parseFloat((sistePunkt.verdi * faktor).toFixed(2));
-
-    oppdatert[id] = {
-      ...historikk,
-      data: [...originalData, { dato: RAPPORT_MAANED, verdi: nyVerdi }]
-    };
-  });
-
-  return oppdatert;
-}
-
 const DEFAULT_LIKVID = 8000000;  // 3 mill aksjefond + 1 mill aksjer + 2 mill renter + 2 mill kontanter
 const DEFAULT_PE = 1000000;
 const DEFAULT_EIENDOM = 1000000;
@@ -525,35 +486,6 @@ export default function PensumPrognoseModell() {
   const [erAdmin, setErAdmin] = useState(false);
   const [adminMelding, setAdminMelding] = useState('');
   const ADMIN_PASSORD = 'pensum2024'; // Enkelt passord - kan endres
-
-  const storageGet = async (key) => {
-    if (typeof window === 'undefined') return null;
-    if (window.storage && window.storage.get) {
-      const result = await window.storage.get(key);
-      return result && result.value ? result.value : null;
-    }
-    return window.localStorage.getItem(key);
-  };
-
-  const storageSet = async (key, value) => {
-    if (typeof window === 'undefined') return false;
-    if (window.storage && window.storage.set) {
-      await window.storage.set(key, value);
-      return true;
-    }
-    window.localStorage.setItem(key, value);
-    return true;
-  };
-
-  const storageDelete = async (key) => {
-    if (typeof window === 'undefined') return false;
-    if (window.storage && window.storage.delete) {
-      await window.storage.delete(key);
-      return true;
-    }
-    window.localStorage.removeItem(key);
-    return true;
-  };
   const [pdfMalConfig, setPdfMalConfig] = useState({
     navn: '',
     filnavn: '',
@@ -586,19 +518,22 @@ export default function PensumPrognoseModell() {
   useEffect(() => {
     const lastAdminData = async () => {
       try {
-        const raterValue = await storageGet('pensum_admin_avkastningsrater');
-        if (raterValue) {
-          setAvkastningsrater(JSON.parse(raterValue));
-        }
+        if (typeof window !== 'undefined' && window.storage && window.storage.get) {
+          // Last avkastningsrater
+          const raterResult = await window.storage.get('pensum_admin_avkastningsrater');
+          if (raterResult && raterResult.value) {
+            setAvkastningsrater(JSON.parse(raterResult.value));
+          }
+          // Last produktdata
+          const produktResult = await window.storage.get('pensum_admin_produkter');
+          if (produktResult && produktResult.value) {
+            setPensumProdukter(JSON.parse(produktResult.value));
+          }
 
-        const produktValue = await storageGet('pensum_admin_produkter');
-        if (produktValue) {
-          setPensumProdukter(JSON.parse(produktValue));
-        }
-
-        const malValue = await storageGet('pensum_admin_pdf_mal');
-        if (malValue) {
-          setPdfMalConfig(JSON.parse(malValue));
+          const malResult = await window.storage.get('pensum_admin_pdf_mal');
+          if (malResult && malResult.value) {
+            setPdfMalConfig(JSON.parse(malResult.value));
+          }
         }
       } catch (e) {
         console.log('Kunne ikke laste admin-data:', e);
@@ -4371,8 +4306,12 @@ export default function PensumPrognoseModell() {
                             return;
                           }
                           try {
-                            await storageSet('pensum_admin_pdf_mal', JSON.stringify(pdfMalConfig));
-                            setAdminMelding('Malmapping lagret i admin (fallback til lokal lagring brukes hvis window.storage mangler).');
+                            if (typeof window !== 'undefined' && window.storage && window.storage.set) {
+                              await window.storage.set('pensum_admin_pdf_mal', JSON.stringify(pdfMalConfig));
+                              setAdminMelding('Malmapping lagret i admin. Neste steg er å koble dette til PDF-generatoren.');
+                            } else {
+                              setAdminMelding('Feil: storage API er ikke tilgjengelig i dette miljøet.');
+                            }
                           } catch (err) {
                             setAdminMelding('Feil ved lagring av maloppsett: ' + err.message);
                           }
