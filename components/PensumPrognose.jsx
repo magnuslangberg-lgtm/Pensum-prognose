@@ -13,9 +13,10 @@ const CATEGORY_COLORS = { aksjer: '#0D2240', renter: '#D4886B', privateMarkets: 
 const ASSET_COLORS = { 'Globale Aksjer': '#5B9BD5', 'Norske Aksjer': '#0D2240', 'Høyrente': '#D4886B', 'Investment Grade': '#E8A690', 'Private Equity': '#0D9488', 'Eiendom': '#B8860B' };
 const ASSET_COLORS_LIGHT = { 'Globale Aksjer': '#93C5FD', 'Norske Aksjer': '#60A5FA', 'Høyrente': '#FDBA74', 'Investment Grade': '#FED7AA', 'Private Equity': '#5EEAD4', 'Eiendom': '#FDE047' };
 
-const formatCurrency = (v) => new Intl.NumberFormat('nb-NO', { style: 'currency', currency: 'NOK', maximumFractionDigits: 0 }).format(v);
-const formatNumber = (v) => new Intl.NumberFormat('nb-NO', { maximumFractionDigits: 0 }).format(v);
-const formatPercent = (v) => v.toFixed(1) + '%';
+const erGyldigTall = (v) => typeof v === 'number' && Number.isFinite(v);
+const formatCurrency = (v) => new Intl.NumberFormat('nb-NO', { style: 'currency', currency: 'NOK', maximumFractionDigits: 0 }).format(erGyldigTall(v) ? v : 0);
+const formatNumber = (v) => new Intl.NumberFormat('nb-NO', { maximumFractionDigits: 0 }).format(erGyldigTall(v) ? v : 0);
+const formatPercent = (v) => erGyldigTall(v) ? v.toFixed(1) + '%' : '—';
 const formatDateEuro = (d) => { const dt = new Date(d); return dt.getDate().toString().padStart(2,'0') + '.' + (dt.getMonth()+1).toString().padStart(2,'0') + '.' + dt.getFullYear(); };
 
 const RISK_PROFILES = {
@@ -66,8 +67,8 @@ function beregnProduktNokkeltall(produkt) {
 
   if (gyldigeAvkastninger.length < 3) {
     return {
-      aarlig3ar: produkt.aarlig3ar,
-      risiko3ar: produkt.risiko3ar
+      aarlig3ar: erGyldigTall(produkt.aarlig3ar) ? produkt.aarlig3ar : null,
+      risiko3ar: erGyldigTall(produkt.risiko3ar) ? produkt.risiko3ar : null
     };
   }
 
@@ -88,6 +89,45 @@ function validerSiderFormat(tekst) {
   if (biter.length === 0) return false;
   return biter.every((bit) => /^(\d+|\d+-\d+|\d+\+)$/.test(bit));
 }
+
+
+const RAPPORT_MAANED = '2026-01';
+const HISTORIKK_2026_YTD = {
+  'global-core-active': -2.0,
+  'global-edge': 0.6,
+  'basis': -0.1,
+  'global-hoyrente': 0.7,
+  'nordisk-hoyrente': 0.6,
+  'norge-a': 2.2,
+  'energy-a': 7.8,
+  'banking-d': -1.1,
+  'financial-d': 0.9
+};
+
+const oppdaterHistorikkTilRapportDato = (historikkMap = {}) => {
+  const oppdatert = {};
+  Object.entries(historikkMap || {}).forEach(([id, historikk]) => {
+    const originalData = Array.isArray(historikk?.data) ? historikk.data : [];
+    const harRapportMaaned = originalData.some((punkt) => punkt.dato === RAPPORT_MAANED);
+
+    if (harRapportMaaned || originalData.length === 0) {
+      oppdatert[id] = historikk;
+      return;
+    }
+
+    const sistePunkt = originalData[originalData.length - 1];
+    const ytd = HISTORIKK_2026_YTD[id];
+    const faktor = typeof ytd === 'number' ? (1 + (ytd / 100)) : 1;
+    const nyVerdi = parseFloat((sistePunkt.verdi * faktor).toFixed(2));
+
+    oppdatert[id] = {
+      ...historikk,
+      data: [...originalData, { dato: RAPPORT_MAANED, verdi: nyVerdi }]
+    };
+  });
+
+  return oppdatert;
+};
 
 const DEFAULT_LIKVID = 8000000;  // 3 mill aksjefond + 1 mill aksjer + 2 mill renter + 2 mill kontanter
 const DEFAULT_PE = 1000000;
@@ -486,6 +526,35 @@ export default function PensumPrognoseModell() {
   const [erAdmin, setErAdmin] = useState(false);
   const [adminMelding, setAdminMelding] = useState('');
   const ADMIN_PASSORD = 'pensum2024'; // Enkelt passord - kan endres
+
+  const storageGet = async (key) => {
+    if (typeof window === 'undefined') return null;
+    if (window.storage && window.storage.get) {
+      const result = await window.storage.get(key);
+      return result && result.value ? result.value : null;
+    }
+    return window.localStorage.getItem(key);
+  };
+
+  const storageSet = async (key, value) => {
+    if (typeof window === 'undefined') return false;
+    if (window.storage && window.storage.set) {
+      await window.storage.set(key, value);
+      return true;
+    }
+    window.localStorage.setItem(key, value);
+    return true;
+  };
+
+  const storageDelete = async (key) => {
+    if (typeof window === 'undefined') return false;
+    if (window.storage && window.storage.delete) {
+      await window.storage.delete(key);
+      return true;
+    }
+    window.localStorage.removeItem(key);
+    return true;
+  };
   const [pdfMalConfig, setPdfMalConfig] = useState({
     navn: '',
     filnavn: '',
@@ -518,22 +587,19 @@ export default function PensumPrognoseModell() {
   useEffect(() => {
     const lastAdminData = async () => {
       try {
-        if (typeof window !== 'undefined' && window.storage && window.storage.get) {
-          // Last avkastningsrater
-          const raterResult = await window.storage.get('pensum_admin_avkastningsrater');
-          if (raterResult && raterResult.value) {
-            setAvkastningsrater(JSON.parse(raterResult.value));
-          }
-          // Last produktdata
-          const produktResult = await window.storage.get('pensum_admin_produkter');
-          if (produktResult && produktResult.value) {
-            setPensumProdukter(JSON.parse(produktResult.value));
-          }
+        const raterValue = await storageGet('pensum_admin_avkastningsrater');
+        if (raterValue) {
+          setAvkastningsrater(JSON.parse(raterValue));
+        }
 
-          const malResult = await window.storage.get('pensum_admin_pdf_mal');
-          if (malResult && malResult.value) {
-            setPdfMalConfig(JSON.parse(malResult.value));
-          }
+        const produktValue = await storageGet('pensum_admin_produkter');
+        if (produktValue) {
+          setPensumProdukter(JSON.parse(produktValue));
+        }
+
+        const malValue = await storageGet('pensum_admin_pdf_mal');
+        if (malValue) {
+          setPdfMalConfig(JSON.parse(malValue));
         }
       } catch (e) {
         console.log('Kunne ikke laste admin-data:', e);
@@ -1923,9 +1989,9 @@ export default function PensumPrognoseModell() {
                     <div>
                       <h4 className="font-semibold mb-3" style={{ color: PENSUM_COLORS.darkBlue }}>Historisk avkastning</h4>
                       <div className="flex flex-wrap gap-4">
-                        {valgtProduktDetalj.aar2024 !== null && <div className="text-center p-3 bg-gray-50 rounded-lg"><span className="text-xs text-gray-500 block">2024</span><span className={"text-lg font-bold " + (valgtProduktDetalj.aar2024 >= 0 ? "text-green-600" : "text-red-600")}>{valgtProduktDetalj.aar2024 > 0 ? '+' : ''}{valgtProduktDetalj.aar2024}%</span></div>}
-                        {valgtProduktDetalj.aar2023 !== null && <div className="text-center p-3 bg-gray-50 rounded-lg"><span className="text-xs text-gray-500 block">2023</span><span className={"text-lg font-bold " + (valgtProduktDetalj.aar2023 >= 0 ? "text-green-600" : "text-red-600")}>{valgtProduktDetalj.aar2023 > 0 ? '+' : ''}{valgtProduktDetalj.aar2023}%</span></div>}
-                        {valgtProduktDetalj.aar2022 !== null && <div className="text-center p-3 bg-gray-50 rounded-lg"><span className="text-xs text-gray-500 block">2022</span><span className={"text-lg font-bold " + (valgtProduktDetalj.aar2022 >= 0 ? "text-green-600" : "text-red-600")}>{valgtProduktDetalj.aar2022 > 0 ? '+' : ''}{valgtProduktDetalj.aar2022}%</span></div>}
+                        {erGyldigTall(valgtProduktDetalj.aar2024) && <div className="text-center p-3 bg-gray-50 rounded-lg"><span className="text-xs text-gray-500 block">2024</span><span className={"text-lg font-bold " + (valgtProduktDetalj.aar2024 >= 0 ? "text-green-600" : "text-red-600")}>{valgtProduktDetalj.aar2024 > 0 ? '+' : ''}{valgtProduktDetalj.aar2024}%</span></div>}
+                        {erGyldigTall(valgtProduktDetalj.aar2023) && <div className="text-center p-3 bg-gray-50 rounded-lg"><span className="text-xs text-gray-500 block">2023</span><span className={"text-lg font-bold " + (valgtProduktDetalj.aar2023 >= 0 ? "text-green-600" : "text-red-600")}>{valgtProduktDetalj.aar2023 > 0 ? '+' : ''}{valgtProduktDetalj.aar2023}%</span></div>}
+                        {erGyldigTall(valgtProduktDetalj.aar2022) && <div className="text-center p-3 bg-gray-50 rounded-lg"><span className="text-xs text-gray-500 block">2022</span><span className={"text-lg font-bold " + (valgtProduktDetalj.aar2022 >= 0 ? "text-green-600" : "text-red-600")}>{valgtProduktDetalj.aar2022 > 0 ? '+' : ''}{valgtProduktDetalj.aar2022}%</span></div>}
                         {(() => { const nokkeltall = beregnProduktNokkeltall(valgtProduktDetalj); return nokkeltall.aarlig3ar !== null && <div className="text-center p-3 bg-blue-50 rounded-lg border border-blue-200"><span className="text-xs text-blue-600 block">Årlig 3 år (beregnet)</span><span className={"text-lg font-bold " + (nokkeltall.aarlig3ar >= 0 ? "text-green-600" : "text-red-600")}>{nokkeltall.aarlig3ar > 0 ? '+' : ''}{nokkeltall.aarlig3ar}%</span></div>; })()}
                         {(() => { const nokkeltall = beregnProduktNokkeltall(valgtProduktDetalj); return nokkeltall.risiko3ar !== null && <div className="text-center p-3 bg-gray-50 rounded-lg"><span className="text-xs text-gray-500 block">Risiko 3 år (beregnet)</span><span className="text-lg font-bold text-gray-700">{nokkeltall.risiko3ar}%</span></div>; })()}
                       </div>
@@ -2823,8 +2889,8 @@ export default function PensumPrognoseModell() {
                     ].map(({ aar, key }) => (
                       <div key={aar}>
                         <p className="text-xs text-gray-500 mb-1">{aar}</p>
-                        <p className={"text-lg font-bold " + (beregnPensumHistorikk[key] === null ? 'text-gray-400' : beregnPensumHistorikk[key] >= 0 ? 'text-green-600' : 'text-red-600')}>
-                          {beregnPensumHistorikk[key] !== null ? (beregnPensumHistorikk[key] >= 0 ? '+' : '') + beregnPensumHistorikk[key].toFixed(1) + '%' : '—'}
+                        <p className={"text-lg font-bold " + (erGyldigTall(beregnPensumHistorikk[key]) ? (beregnPensumHistorikk[key] >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>
+                          {erGyldigTall(beregnPensumHistorikk[key]) ? (beregnPensumHistorikk[key] >= 0 ? '+' : '') + beregnPensumHistorikk[key].toFixed(1) + '%' : '—'}
                         </p>
                       </div>
                     ))}
@@ -3088,12 +3154,12 @@ export default function PensumPrognoseModell() {
                       {pensumProdukter.enkeltfond.map((p, idx) => (
                         <tr key={p.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                           <td className="py-2 px-4 font-medium" style={{ color: PENSUM_COLORS.darkBlue }}>{p.navn}</td>
-                          <td className={"py-2 px-3 text-right " + (p.aar2024 === null ? 'text-gray-400' : p.aar2024 >= 0 ? 'text-green-600' : 'text-red-600')}>{p.aar2024 !== null ? p.aar2024.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (p.aar2023 === null ? 'text-gray-400' : p.aar2023 >= 0 ? 'text-green-600' : 'text-red-600')}>{p.aar2023 !== null ? p.aar2023.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (p.aar2022 === null ? 'text-gray-400' : p.aar2022 >= 0 ? 'text-green-600' : 'text-red-600')}>{p.aar2022 !== null ? p.aar2022.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (p.aar2021 === null ? 'text-gray-400' : p.aar2021 >= 0 ? 'text-green-600' : 'text-red-600')}>{p.aar2021 !== null ? p.aar2021.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (p.aar2020 === null ? 'text-gray-400' : p.aar2020 >= 0 ? 'text-green-600' : 'text-red-600')}>{p.aar2020 !== null ? p.aar2020.toFixed(1) + '%' : '—'}</td>
-                          {(() => { const nokkeltall = beregnProduktNokkeltall(p); return <><td className={"py-2 px-3 text-right " + (nokkeltall.aarlig3ar === null ? 'text-gray-400' : nokkeltall.aarlig3ar >= 0 ? 'text-green-600' : 'text-red-600')}>{nokkeltall.aarlig3ar !== null ? nokkeltall.aarlig3ar.toFixed(1) + '%' : '—'}</td><td className="py-2 px-3 text-right text-gray-600">{nokkeltall.risiko3ar !== null ? nokkeltall.risiko3ar.toFixed(1) + '%' : '—'}</td></>; })()}
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2024) ? (p.aar2024 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2024) ? p.aar2024.toFixed(1) + '%' : '—'}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2023) ? (p.aar2023 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2023) ? p.aar2023.toFixed(1) + '%' : '—'}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2022) ? (p.aar2022 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2022) ? p.aar2022.toFixed(1) + '%' : '—'}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2021) ? (p.aar2021 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2021) ? p.aar2021.toFixed(1) + '%' : '—'}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2020) ? (p.aar2020 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2020) ? p.aar2020.toFixed(1) + '%' : '—'}</td>
+                          {(() => { const nokkeltall = beregnProduktNokkeltall(p); return <><td className={"py-2 px-3 text-right " + (erGyldigTall(nokkeltall.aarlig3ar) ? (nokkeltall.aarlig3ar >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(nokkeltall.aarlig3ar) ? nokkeltall.aarlig3ar.toFixed(1) + '%' : '—'}</td><td className="py-2 px-3 text-right text-gray-600">{erGyldigTall(nokkeltall.risiko3ar) ? nokkeltall.risiko3ar.toFixed(1) + '%' : '—'}</td></>; })()}
                         </tr>
                       ))}
                       <tr className="bg-gray-100">
@@ -3102,12 +3168,12 @@ export default function PensumPrognoseModell() {
                       {pensumProdukter.fondsportefoljer.map((p, idx) => (
                         <tr key={p.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                           <td className="py-2 px-4 font-medium" style={{ color: PENSUM_COLORS.darkBlue }}>{p.navn}</td>
-                          <td className={"py-2 px-3 text-right " + (p.aar2024 === null ? 'text-gray-400' : p.aar2024 >= 0 ? 'text-green-600' : 'text-red-600')}>{p.aar2024 !== null ? p.aar2024.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (p.aar2023 === null ? 'text-gray-400' : p.aar2023 >= 0 ? 'text-green-600' : 'text-red-600')}>{p.aar2023 !== null ? p.aar2023.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (p.aar2022 === null ? 'text-gray-400' : p.aar2022 >= 0 ? 'text-green-600' : 'text-red-600')}>{p.aar2022 !== null ? p.aar2022.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (p.aar2021 === null ? 'text-gray-400' : p.aar2021 >= 0 ? 'text-green-600' : 'text-red-600')}>{p.aar2021 !== null ? p.aar2021.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (p.aar2020 === null ? 'text-gray-400' : p.aar2020 >= 0 ? 'text-green-600' : 'text-red-600')}>{p.aar2020 !== null ? p.aar2020.toFixed(1) + '%' : '—'}</td>
-                          {(() => { const nokkeltall = beregnProduktNokkeltall(p); return <><td className={"py-2 px-3 text-right " + (nokkeltall.aarlig3ar === null ? 'text-gray-400' : nokkeltall.aarlig3ar >= 0 ? 'text-green-600' : 'text-red-600')}>{nokkeltall.aarlig3ar !== null ? nokkeltall.aarlig3ar.toFixed(1) + '%' : '—'}</td><td className="py-2 px-3 text-right text-gray-600">{nokkeltall.risiko3ar !== null ? nokkeltall.risiko3ar.toFixed(1) + '%' : '—'}</td></>; })()}
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2024) ? (p.aar2024 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2024) ? p.aar2024.toFixed(1) + '%' : '—'}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2023) ? (p.aar2023 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2023) ? p.aar2023.toFixed(1) + '%' : '—'}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2022) ? (p.aar2022 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2022) ? p.aar2022.toFixed(1) + '%' : '—'}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2021) ? (p.aar2021 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2021) ? p.aar2021.toFixed(1) + '%' : '—'}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2020) ? (p.aar2020 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2020) ? p.aar2020.toFixed(1) + '%' : '—'}</td>
+                          {(() => { const nokkeltall = beregnProduktNokkeltall(p); return <><td className={"py-2 px-3 text-right " + (erGyldigTall(nokkeltall.aarlig3ar) ? (nokkeltall.aarlig3ar >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(nokkeltall.aarlig3ar) ? nokkeltall.aarlig3ar.toFixed(1) + '%' : '—'}</td><td className="py-2 px-3 text-right text-gray-600">{erGyldigTall(nokkeltall.risiko3ar) ? nokkeltall.risiko3ar.toFixed(1) + '%' : '—'}</td></>; })()}
                         </tr>
                       ))}
                       {visAlternative && (
@@ -4306,12 +4372,8 @@ export default function PensumPrognoseModell() {
                             return;
                           }
                           try {
-                            if (typeof window !== 'undefined' && window.storage && window.storage.set) {
-                              await window.storage.set('pensum_admin_pdf_mal', JSON.stringify(pdfMalConfig));
-                              setAdminMelding('Malmapping lagret i admin. Neste steg er å koble dette til PDF-generatoren.');
-                            } else {
-                              setAdminMelding('Feil: storage API er ikke tilgjengelig i dette miljøet.');
-                            }
+                            await storageSet('pensum_admin_pdf_mal', JSON.stringify(pdfMalConfig));
+                            setAdminMelding('Malmapping lagret i admin (fallback til lokal lagring brukes hvis window.storage mangler).');
                           } catch (err) {
                             setAdminMelding('Feil ved lagring av maloppsett: ' + err.message);
                           }
