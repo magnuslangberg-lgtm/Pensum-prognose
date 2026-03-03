@@ -10,6 +10,25 @@ function formatPercent(value) {
   return `${(Number(value) || 0).toFixed(1)}%`;
 }
 
+
+function resolvePptxConstructor(mod) {
+  if (typeof mod === 'function') return mod;
+  if (mod && typeof mod.default === 'function') return mod.default;
+  if (mod && mod.default && typeof mod.default.default === 'function') return mod.default.default;
+  if (mod && typeof mod.PptxGenJS === 'function') return mod.PptxGenJS;
+  return null;
+}
+
+function loadPptxGenJs() {
+  try {
+    const req = eval('require');
+    const mod = req('pptxgenjs');
+    return resolvePptxConstructor(mod);
+  } catch (err) {
+    return null;
+  }
+}
+
 function buildPptx(PptxGenJS, data) {
   const pptx = new PptxGenJS();
   pptx.layout = 'LAYOUT_WIDE';
@@ -165,25 +184,26 @@ export default async function handler(req, res) {
 
   try {
     const data = req.body || {};
-    const pptx = buildPptx(data);
-    const buffer = await pptx.write({ outputType: 'nodebuffer' });
-    const filnavn = `Pensum_Investeringsforslag_${(data.kundeNavn || 'Kunde').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pptx`;
 
     try {
-      const dynamicImport = new Function('m', 'return import(m)');
-      const mod = await dynamicImport('pptxgenjs');
-      const PptxGenJS = mod.default || mod;
+      const PptxGenJS = loadPptxGenJs();
+      if (!PptxGenJS) {
+        throw new Error('pptxgenjs ikke tilgjengelig eller ugyldig eksport');
+      }
       const pptx = buildPptx(PptxGenJS, data);
       const buffer = await pptx.write({ outputType: 'nodebuffer' });
       const filnavn = `Pensum_Investeringsforslag_${(data.kundeNavn || 'Kunde').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pptx`;
+      res.setHeader('X-Pensum-Output-Format', 'pptx');
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
       res.setHeader('Content-Disposition', `attachment; filename="${filnavn}"`);
       res.setHeader('Content-Length', buffer.length);
       return res.send(buffer);
     } catch (pptErr) {
-      console.warn('pptxgenjs ikke tilgjengelig, bruker PDF-fallback:', pptErr.message);
+      console.warn('PPTX-generering feilet, bruker PDF-fallback:', pptErr.message);
       const buffer = buildSimplePdfBuffer(data);
       const filnavn = `Pensum_Investeringsforslag_${(data.kundeNavn || 'Kunde').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      res.setHeader('X-Pensum-Output-Format', 'pdf-fallback');
+      res.setHeader('X-Pensum-Generator-Message', encodeURIComponent('PPTX utilgjengelig i miljøet - leverer PDF fallback'));
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `attachment; filename="${filnavn}"`);
       res.setHeader('Content-Length', buffer.length);

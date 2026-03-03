@@ -1579,19 +1579,37 @@ export default function PensumPrognoseModell() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        let melding = await res.text();
+        try {
+          const parsed = JSON.parse(melding);
+          if (parsed?.error) melding = parsed.error;
+        } catch (_) {
+          // behold rå melding
+        }
+        throw new Error(melding || 'Ukjent feil fra server.');
+      }
+
+      const outputFormat = res.headers.get('x-pensum-output-format') || '';
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
       const disposition = res.headers.get('content-disposition') || '';
-      const match = disposition.match(/filename=\"([^\"]+)\"/i);
-      const fallbackName = `Pensum_Investeringsforslag_${(kundeNavn || 'Kunde').replace(/\s+/g, '_')}.pptx`;
+      const match = disposition.match(/filename="([^"]+)"/i);
+      const fallbackName = outputFormat === 'pdf-fallback'
+        ? `Pensum_Investeringsforslag_${(kundeNavn || 'Kunde').replace(/\s+/g, '_')}.pdf`
+        : `Pensum_Investeringsforslag_${(kundeNavn || 'Kunde').replace(/\s+/g, '_')}.pptx`;
       a.download = match ? match[1] : fallbackName;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
+
+      if (outputFormat === 'pdf-fallback') {
+        alert('PowerPoint er midlertidig utilgjengelig i miljøet. Du fikk PDF som fallback.');
+      }
+
       setPdfModal(false);
     } catch (err) {
       alert('Feil ved generering av presentasjon: ' + err.message);
