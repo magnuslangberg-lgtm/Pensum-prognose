@@ -1569,6 +1569,8 @@ export default function PensumPrognoseModell() {
         malConfig: {
           navn: pdfMalConfig.navn,
           filnavn: pdfMalConfig.filnavn,
+          filtype: pdfMalConfig.filtype,
+          filDataUrl: pdfMalConfig.filDataUrl,
           fasteSider: pdfMalConfig.fasteSider,
           dynamiskeSider: pdfMalConfig.dynamiskeSider,
           dynamiskBeskrivelse: pdfMalConfig.dynamiskBeskrivelse
@@ -4277,7 +4279,7 @@ export default function PensumPrognoseModell() {
                   <div className="p-6 space-y-4">
                     <p className="text-sm text-gray-600">
                       Last opp malfil og marker hvilke sider som er faste og dynamiske.
-                      Maloppsettet lagres i admin og brukes som styringsdata i genereringen (selve PPT/PDF-filen importeres ikke direkte i denne versjonen).
+                      Maloppsettet lagres i admin og den opplastede PPTX-filen brukes nå direkte som grunnlag ved generering (placeholder-felter fylles inn dynamisk).
                     </p>
 
                     <div className="grid md:grid-cols-2 gap-4">
