@@ -54,73 +54,51 @@ function getPptxConstructor() {
   return resolvePptxConstructor(PptxModule);
 }
 
+function parsePageSpec(spec = '') {
+  const out = new Set();
+  const s = String(spec || '').trim();
+  if (!s) return out;
+  s.split(',').map((p) => p.trim()).filter(Boolean).forEach((part) => {
+    if (/^\d+\+$/.test(part)) {
+      const start = parseInt(part.replace('+', ''), 10);
+      for (let i = start; i <= start + 8; i += 1) out.add(i);
+      return;
+    }
+    if (/^\d+-\d+$/.test(part)) {
+      const [a, b] = part.split('-').map((x) => parseInt(x, 10));
+      const lo = Math.min(a, b);
+      const hi = Math.max(a, b);
+      for (let i = lo; i <= hi; i += 1) out.add(i);
+      return;
+    }
+    if (/^\d+$/.test(part)) out.add(parseInt(part, 10));
+  });
+  return out;
+}
+
+function parseDynamicDescriptions(txt = '') {
+  const map = {};
+  String(txt || '').split('\n').map((l) => l.trim()).filter(Boolean).forEach((line) => {
+    const m = line.match(/^side\s*(\d+)\s*:\s*(.+)$/i);
+    if (m) map[parseInt(m[1], 10)] = m[2].trim();
+  });
+  return map;
+}
+
 function addHeader(pptx, slide, subtitle = '') {
-  slide.addShape(pptx.ShapeType.rect, {
-    x: 0,
-    y: 0,
-    w: 13.33,
-    h: 0.5,
-    fill: { color: 'FFFFFF' },
-    line: { color: 'FFFFFF', pt: 0 }
-  });
-  slide.addText('Pensum Asset Management', {
-    x: 0.6,
-    y: 0.12,
-    w: 6,
-    h: 0.25,
-    fontSize: 11,
-    bold: true,
-    color: COLORS.navy
-  });
+  slide.background = { color: COLORS.bg };
+  slide.addShape(pptx.ShapeType.rect, { x: 0, y: 0, w: 13.33, h: 0.5, fill: { color: 'FFFFFF' }, line: { color: 'FFFFFF', pt: 0 } });
+  slide.addText('Pensum Asset Management', { x: 0.6, y: 0.12, w: 6, h: 0.25, fontSize: 11, bold: true, color: COLORS.navy });
   if (subtitle) {
-    slide.addText(subtitle, {
-      x: 7.8,
-      y: 0.12,
-      w: 4.9,
-      h: 0.25,
-      align: 'right',
-      fontSize: 10,
-      color: COLORS.muted
-    });
+    slide.addText(subtitle, { x: 7.8, y: 0.12, w: 4.9, h: 0.25, align: 'right', fontSize: 10, color: COLORS.muted });
   }
 }
 
 function addFooter(pptx, slide, pageNo, note = '') {
-  slide.addShape(pptx.ShapeType.line, {
-    x: 0.6,
-    y: 7.1,
-    w: 12.1,
-    h: 0,
-    line: { color: COLORS.line, pt: 1 }
-  });
-  slide.addText(`Side ${pageNo}`, {
-    x: 0.6,
-    y: 7.14,
-    w: 2,
-    h: 0.2,
-    fontSize: 9,
-    color: COLORS.muted
-  });
-  if (note) {
-    slide.addText(note, {
-      x: 2.0,
-      y: 7.14,
-      w: 8.8,
-      h: 0.2,
-      fontSize: 9,
-      color: COLORS.muted,
-      align: 'center'
-    });
-  }
-  slide.addText(new Date().toLocaleDateString('nb-NO'), {
-    x: 10.8,
-    y: 7.14,
-    w: 1.9,
-    h: 0.2,
-    fontSize: 9,
-    color: COLORS.muted,
-    align: 'right'
-  });
+  slide.addShape(pptx.ShapeType.line, { x: 0.6, y: 7.1, w: 12.1, h: 0, line: { color: COLORS.line, pt: 1 } });
+  slide.addText(`Side ${pageNo}`, { x: 0.6, y: 7.14, w: 2, h: 0.2, fontSize: 9, color: COLORS.muted });
+  if (note) slide.addText(note, { x: 2.0, y: 7.14, w: 8.8, h: 0.2, fontSize: 9, color: COLORS.muted, align: 'center' });
+  slide.addText(new Date().toLocaleDateString('nb-NO'), { x: 10.8, y: 7.14, w: 1.9, h: 0.2, fontSize: 9, color: COLORS.muted, align: 'right' });
 }
 
 function calculateScenarios(data) {
@@ -130,15 +108,129 @@ function calculateScenarios(data) {
   const optimistic = expected + 2;
   const conservative = Math.max(expected - 3, -5);
   const project = (rate) => total * Math.pow(1 + rate / 100, years);
+  return { years, expected, optimistic, conservative, expValue: project(expected), optValue: project(optimistic), consValue: project(conservative) };
+}
+
+function prepareData(data) {
+  const kunde = data.kundeNavn || 'Investor';
+  const total = n(data.totalKapital);
+  const risiko = data.risikoProfil || 'Ikke angitt';
+  const horisont = Math.max(1, Math.round(n(data.horisont, 10)));
+  const avkastning = n(data.vektetAvkastning);
+  const allokering = (Array.isArray(data.allokering) ? data.allokering : [])
+    .map((a) => ({ navn: a.navn || 'Ukjent', vekt: n(a.vekt) }))
+    .filter((a) => a.vekt > 0)
+    .sort((a, b) => b.vekt - a.vekt);
+  const topAlloc = allokering.slice(0, 8);
+  const products = (Array.isArray(data.produkterIBruk) ? data.produkterIBruk : []).map((id) => ({ id, navn: PRODUKT_NAVN[id] || id }));
+  const malConfig = data.malConfig || {};
+  const dynamicDescriptions = parseDynamicDescriptions(malConfig.dynamiskBeskrivelse || '');
+  const dynamicPages = [...parsePageSpec(malConfig.dynamiskeSider || '4-9')].sort((a, b) => a - b).filter((p) => p >= 4 && p <= 9);
+  const fixedPages = [...parsePageSpec(malConfig.fasteSider || '1-3,10+')].sort((a, b) => a - b);
+
   return {
-    years,
-    expected,
-    optimistic,
-    conservative,
-    expValue: project(expected),
-    optValue: project(optimistic),
-    consValue: project(conservative)
+    kunde,
+    total,
+    risiko,
+    horisont,
+    avkastning,
+    allokering,
+    topAlloc,
+    products,
+    scenario: calculateScenarios({ totalKapital: total, horisont, vektetAvkastning: avkastning }),
+    malConfig,
+    dynamicDescriptions,
+    dynamicPages: dynamicPages.length > 0 ? dynamicPages : [4, 5, 6, 7, 8, 9],
+    fixedPages
   };
+}
+
+function renderFixedSlides(pptx, prepared) {
+  const { kunde, total, risiko, horisont, avkastning, malConfig } = prepared;
+
+  const s1 = pptx.addSlide();
+  addHeader(pptx, s1, 'Investeringsforslag');
+  s1.addText('Investeringsforslag', { x: 0.8, y: 1.0, w: 8, h: 0.8, fontSize: 38, bold: true, color: COLORS.navy });
+  s1.addText(kunde, { x: 0.8, y: 1.95, w: 8, h: 0.5, fontSize: 24, bold: true, color: COLORS.salmon });
+  s1.addText(`Dato: ${new Date().toLocaleDateString('nb-NO')}`, { x: 0.8, y: 2.5, w: 4, h: 0.3, fontSize: 12, color: COLORS.muted });
+  s1.addShape(pptx.ShapeType.roundRect, { x: 0.8, y: 3.2, w: 12.0, h: 2.6, fill: { color: 'FFFFFF' }, line: { color: COLORS.line, pt: 1 }, radius: 0.06 });
+  s1.addText('Kort oppsummering', { x: 1.1, y: 3.45, w: 4, h: 0.4, fontSize: 18, bold: true, color: COLORS.navy });
+  s1.addText(`• Total kapital: ${formatCurrency(total)}\n• Risikoprofil: ${risiko}\n• Horisont: ${horisont} år\n• Forventet avkastning: ${formatPercent(avkastning)} p.a.`, { x: 1.15, y: 3.95, w: 6.5, h: 1.8, fontSize: 14, color: COLORS.text, breakLine: true });
+  addFooter(pptx, s1, 1, malConfig?.navn ? `Mal: ${malConfig.navn}` : '');
+
+  const s2 = pptx.addSlide();
+  addHeader(pptx, s2, 'Investeringscase');
+  s2.addText('Anbefaling i ett blikk', { x: 0.8, y: 0.9, w: 8.5, h: 0.6, fontSize: 28, bold: true, color: COLORS.navy });
+  s2.addShape(pptx.ShapeType.line, { x: 0.8, y: 1.45, w: 11.8, h: 0, line: { color: COLORS.navy, pt: 1 } });
+  s2.addShape(pptx.ShapeType.roundRect, { x: 0.9, y: 1.8, w: 12, h: 4.9, fill: { color: 'FFFFFF' }, line: { color: COLORS.line, pt: 1 }, radius: 0.05 });
+  s2.addText([
+    `• Porteføljen foreslås tilpasset ${risiko.toLowerCase()} risikoprofil med ${horisont} års horisont.`,
+    `• Forventet annualisert avkastning estimeres til ${formatPercent(avkastning)} basert på allokering og produktvalg.`,
+    '• Løsningen er bygget for løpende oppfølging i Pensum-plattformen med tydelig risikorapportering.',
+    '• Forslaget skal brukes som beslutningsstøtte og kvalitetssikres før implementering.'
+  ].join('\n'), { x: 1.2, y: 2.2, w: 10.8, h: 3.8, fontSize: 16, color: COLORS.text, breakLine: true });
+  addFooter(pptx, s2, 2);
+
+  const s3 = pptx.addSlide();
+  addHeader(pptx, s3, 'Malstatus');
+  s3.addText('Maloppsett (admin)', { x: 0.8, y: 0.9, w: 8, h: 0.6, fontSize: 28, bold: true, color: COLORS.navy });
+  s3.addShape(pptx.ShapeType.line, { x: 0.8, y: 1.45, w: 11.8, h: 0, line: { color: COLORS.navy, pt: 1 } });
+  s3.addShape(pptx.ShapeType.roundRect, { x: 0.9, y: 1.9, w: 12, h: 4.9, fill: { color: 'FFFFFF' }, line: { color: COLORS.line, pt: 1 }, radius: 0.05 });
+  s3.addText(`Malnavn: ${malConfig?.navn || 'Ikke angitt'}\nFil: ${malConfig?.filnavn || 'Ikke angitt'}\nFaste sider: ${malConfig?.fasteSider || '—'}\nDynamiske sider: ${malConfig?.dynamiskeSider || '—'}`, { x: 1.2, y: 2.3, w: 11.2, h: 1.9, fontSize: 14, color: COLORS.text, breakLine: true });
+  s3.addText('Denne generatoren fyller de dynamiske sidene i tråd med sidekartet over.', { x: 1.2, y: 5.1, w: 11.2, h: 0.4, fontSize: 12, color: COLORS.muted });
+  addFooter(pptx, s3, 3);
+}
+
+function renderDynamicPage(pptx, pageNumber, prepared) {
+  const { topAlloc, total, products, scenario, dynamicDescriptions } = prepared;
+  const userTitle = dynamicDescriptions[pageNumber];
+
+  const slide = pptx.addSlide();
+  addHeader(pptx, slide, `Dynamisk side ${pageNumber}`);
+  const defaultTitle = {
+    4: 'Porteføljen i dag',
+    5: 'Aksjeandel vs verdensindeks',
+    6: 'Verdensindeksen',
+    7: 'Pensums porteføljeforslag',
+    8: 'Avkastning',
+    9: 'Risiko og månedsoppsummering'
+  }[pageNumber] || `Side ${pageNumber}`;
+  const title = userTitle || defaultTitle;
+
+  slide.addText(title, { x: 0.8, y: 0.9, w: 9.5, h: 0.6, fontSize: 28, bold: true, color: COLORS.navy });
+  slide.addShape(pptx.ShapeType.line, { x: 0.8, y: 1.45, w: 11.8, h: 0, line: { color: COLORS.navy, pt: 1 } });
+
+  if (pageNumber === 4 || pageNumber === 7) {
+    slide.addTable(
+      [['Aktivaklasse', 'Andel', 'Beløp'], ...topAlloc.map((a) => [a.navn, `${a.vekt.toFixed(1)}%`, formatCurrency((a.vekt / 100) * total)])],
+      { x: 0.8, y: 1.9, w: 7.4, colW: [4.2, 1.1, 2.1], fontSize: 11, border: { type: 'solid', color: COLORS.line, pt: 1 }, fill: 'FFFFFF', color: COLORS.text }
+    );
+    if (topAlloc.length > 0) {
+      slide.addChart(pptx.ChartType.bar, [{ name: 'Andel', labels: topAlloc.map((a) => a.navn), values: topAlloc.map((a) => a.vekt) }], {
+        x: 8.5, y: 2.0, w: 4.2, h: 4.5,
+        barDir: 'bar', showLegend: false, valAxisMaxVal: 100, valAxisMinVal: 0, valAxisMajorUnit: 10,
+        chartColors: [COLORS.navy], showValue: true
+      });
+    }
+  } else if (pageNumber === 5 || pageNumber === 6 || pageNumber === 8) {
+    const labels = ['Konservativ', 'Forventet', 'Optimistisk'];
+    const values = [scenario.consValue, scenario.expValue, scenario.optValue].map((v) => Math.round(v / 1000));
+    slide.addChart(pptx.ChartType.bar, [{ name: 'Estimert sluttverdi (kNOK)', labels, values }], {
+      x: 1.0, y: 2.0, w: 11.5, h: 3.8,
+      showLegend: false, valGridLine: { color: 'EEF2F7', style: 'dash' },
+      chartColors: [COLORS.red, COLORS.navy, COLORS.green], showValue: true
+    });
+    slide.addText(`Horisont: ${scenario.years} år | Forv. avkastning: ${formatPercent(scenario.expected)} p.a.`, { x: 1.0, y: 6.0, w: 11.3, h: 0.4, fontSize: 12, color: COLORS.muted, align: 'center' });
+  } else if (pageNumber === 9) {
+    slide.addShape(pptx.ShapeType.roundRect, { x: 0.9, y: 1.9, w: 12.0, h: 4.9, fill: { color: 'FFFFFF' }, line: { color: COLORS.line, pt: 1 }, radius: 0.05 });
+    const names = products.length ? products.map((p) => p.navn) : ['Ingen produkter valgt'];
+    slide.addText(`Valgte produkter:\n${names.map((x) => `• ${x}`).join('\n')}\n\nRisikonivå: ${prepared.risiko}\nForventet avkastning: ${formatPercent(prepared.avkastning)} p.a.`, { x: 1.2, y: 2.3, w: 11.2, h: 4.1, fontSize: 14, color: COLORS.text, breakLine: true });
+  } else {
+    slide.addShape(pptx.ShapeType.roundRect, { x: 0.9, y: 1.9, w: 12.0, h: 4.9, fill: { color: 'FFFFFF' }, line: { color: COLORS.line, pt: 1 }, radius: 0.05 });
+    slide.addText('Ingen standardinnhold definert for denne siden i nåværende generator.', { x: 1.2, y: 2.6, w: 11.0, h: 1.0, fontSize: 14, color: COLORS.muted });
+  }
+
+  addFooter(pptx, slide, pageNumber, userTitle ? `Admin-tekst: ${userTitle}` : '');
 }
 
 function buildPptx(PptxGenJS, data) {
@@ -150,166 +242,9 @@ function buildPptx(PptxGenJS, data) {
   pptx.title = `Investeringsforslag - ${data.kundeNavn || 'Kunde'}`;
   pptx.lang = 'nb-NO';
 
-  const kunde = data.kundeNavn || 'Investor';
-  const total = n(data.totalKapital);
-  const risiko = data.risikoProfil || 'Ikke angitt';
-  const horisont = Math.max(1, Math.round(n(data.horisont, 10)));
-  const avkastning = n(data.vektetAvkastning);
-  const allokering = (Array.isArray(data.allokering) ? data.allokering : [])
-    .map((a) => ({ navn: a.navn || 'Ukjent', vekt: n(a.vekt) }))
-    .filter((a) => a.vekt > 0)
-    .sort((a, b) => b.vekt - a.vekt);
-  const topAlloc = allokering.slice(0, 8);
-  const products = (Array.isArray(data.produkterIBruk) ? data.produkterIBruk : [])
-    .map((id) => ({ id, navn: PRODUKT_NAVN[id] || id }));
-  const scenario = calculateScenarios({ totalKapital: total, horisont, vektetAvkastning: avkastning });
-
-  // 1: Cover
-  const s1 = pptx.addSlide();
-  s1.background = { color: COLORS.bg };
-  addHeader(pptx, s1, 'Investeringsforslag');
-  s1.addText('Investeringsforslag', { x: 0.8, y: 1.0, w: 8, h: 0.8, fontSize: 38, bold: true, color: COLORS.navy });
-  s1.addText(kunde, { x: 0.8, y: 1.95, w: 8, h: 0.5, fontSize: 24, bold: true, color: COLORS.salmon });
-  s1.addText(`Dato: ${new Date().toLocaleDateString('nb-NO')}`, { x: 0.8, y: 2.5, w: 4, h: 0.3, fontSize: 12, color: COLORS.muted });
-  s1.addShape(pptx.ShapeType.roundRect, { x: 0.8, y: 3.2, w: 12.0, h: 2.6, fill: { color: 'FFFFFF' }, line: { color: COLORS.line, pt: 1 }, radius: 0.06 });
-  s1.addText('Kort oppsummering', { x: 1.1, y: 3.45, w: 4, h: 0.4, fontSize: 18, bold: true, color: COLORS.navy });
-  s1.addText(
-    `• Total kapital: ${formatCurrency(total)}\n• Risikoprofil: ${risiko}\n• Horisont: ${horisont} år\n• Forventet avkastning: ${formatPercent(avkastning)} p.a.`,
-    { x: 1.15, y: 3.95, w: 6.5, h: 1.8, fontSize: 14, color: COLORS.text, breakLine: true }
-  );
-  addFooter(pptx, s1, 1, data.malConfig?.navn ? `Mal: ${data.malConfig.navn}` : '');
-
-  // 2: Investment thesis
-  const s2 = pptx.addSlide();
-  addHeader(pptx, s2, 'Investeringscase');
-  s2.addText('Anbefaling i ett blikk', { x: 0.8, y: 0.9, w: 8.5, h: 0.6, fontSize: 28, bold: true, color: COLORS.navy });
-  s2.addShape(pptx.ShapeType.line, { x: 0.8, y: 1.45, w: 11.8, h: 0, line: { color: COLORS.navy, pt: 1 } });
-  const bullets = [
-    `Porteføljen foreslås tilpasset en ${risiko.toLowerCase()} risikoprofil med ${horisont} års horisont.`,
-    `Forventet annualisert avkastning estimeres til ${formatPercent(avkastning)} basert på aktivafordeling og produktutvalg.`,
-    `Anbefalingen balanserer likvide byggesteiner og spesialiserte fond for robust diversifisering.`,
-    `Løsningen er bygget for løpende oppfølging i Pensum-plattformen med tydelig risikorapportering.`
-  ];
-  s2.addShape(pptx.ShapeType.roundRect, { x: 0.9, y: 1.8, w: 12, h: 4.9, fill: { color: 'FFFFFF' }, line: { color: COLORS.line, pt: 1 }, radius: 0.05 });
-  s2.addText(bullets.map((b) => `• ${b}`).join('\n'), { x: 1.2, y: 2.2, w: 10.8, h: 3.8, fontSize: 16, color: COLORS.text, breakLine: true });
-  addFooter(pptx, s2, 2);
-
-  // 3: Allocation
-  const s3 = pptx.addSlide();
-  addHeader(pptx, s3, 'Allokering');
-  s3.addText('Anbefalt allokering', { x: 0.8, y: 0.9, w: 6.5, h: 0.6, fontSize: 28, bold: true, color: COLORS.navy });
-  s3.addShape(pptx.ShapeType.line, { x: 0.8, y: 1.45, w: 11.8, h: 0, line: { color: COLORS.navy, pt: 1 } });
-
-  s3.addTable(
-    [['Aktivaklasse', 'Andel', 'Beløp'], ...topAlloc.map((a) => [a.navn, `${a.vekt.toFixed(1)}%`, formatCurrency((a.vekt / 100) * total)])],
-    {
-      x: 0.8,
-      y: 1.8,
-      w: 7.5,
-      colW: [4.3, 1.1, 2.1],
-      fontSize: 11,
-      border: { type: 'solid', color: COLORS.line, pt: 1 },
-      color: COLORS.text,
-      fill: 'FFFFFF'
-    }
-  );
-
-  if (topAlloc.length > 0) {
-    s3.addChart(pptx.ChartType.bar, [{ name: 'Andel', labels: topAlloc.map((a) => a.navn), values: topAlloc.map((a) => a.vekt) }], {
-      x: 8.6,
-      y: 1.9,
-      w: 4.1,
-      h: 4.7,
-      barDir: 'bar',
-      catAxisLabelRotate: -20,
-      showLegend: false,
-      valAxisMaxVal: 100,
-      valAxisMinVal: 0,
-      valAxisMajorUnit: 10,
-      chartColors: [COLORS.navy],
-      showValue: true,
-      valGridLine: { color: 'EEF2F7', style: 'dash' }
-    });
-  }
-  addFooter(pptx, s3, 3);
-
-  // 4: Scenario
-  const s4 = pptx.addSlide();
-  addHeader(pptx, s4, 'Scenarioanalyse');
-  s4.addText(`Scenarioanalyse (${scenario.years} år)`, { x: 0.8, y: 0.9, w: 8.5, h: 0.6, fontSize: 28, bold: true, color: COLORS.navy });
-  s4.addShape(pptx.ShapeType.line, { x: 0.8, y: 1.45, w: 11.8, h: 0, line: { color: COLORS.navy, pt: 1 } });
-
-  const cards = [
-    { title: 'Konservativ', rate: scenario.conservative, value: scenario.consValue, color: COLORS.red, bg: 'FEF2F2' },
-    { title: 'Forventet', rate: scenario.expected, value: scenario.expValue, color: COLORS.navy, bg: 'EFF6FF' },
-    { title: 'Optimistisk', rate: scenario.optimistic, value: scenario.optValue, color: COLORS.green, bg: 'ECFDF5' }
-  ];
-
-  cards.forEach((c, i) => {
-    const x = 0.95 + i * 4.1;
-    s4.addShape(pptx.ShapeType.roundRect, { x, y: 2.0, w: 3.7, h: 3.4, fill: { color: c.bg }, line: { color: COLORS.line, pt: 1 }, radius: 0.05 });
-    s4.addText(c.title, { x: x + 0.2, y: 2.2, w: 3.3, h: 0.4, fontSize: 14, bold: true, color: c.color, align: 'center' });
-    s4.addText(`Avkastning: ${formatPercent(c.rate)} p.a.`, { x: x + 0.2, y: 2.75, w: 3.3, h: 0.3, fontSize: 11, color: COLORS.text, align: 'center' });
-    s4.addText(formatCurrency(c.value), { x: x + 0.2, y: 3.4, w: 3.3, h: 0.6, fontSize: 20, bold: true, color: c.color, align: 'center' });
-  });
-
-  s4.addText('Scenarioene er deterministiske estimater basert på dagens forutsetninger og skal brukes som beslutningsstøtte.', {
-    x: 1,
-    y: 5.85,
-    w: 11.7,
-    h: 0.5,
-    fontSize: 11,
-    color: COLORS.muted,
-    align: 'center'
-  });
-  addFooter(pptx, s4, 4);
-
-  // 5: Product selection
-  const s5 = pptx.addSlide();
-  addHeader(pptx, s5, 'Produktutvalg');
-  s5.addText('Valgte produkter i forslaget', { x: 0.8, y: 0.9, w: 8.5, h: 0.6, fontSize: 28, bold: true, color: COLORS.navy });
-  s5.addShape(pptx.ShapeType.line, { x: 0.8, y: 1.45, w: 11.8, h: 0, line: { color: COLORS.navy, pt: 1 } });
-
-  const names = products.length > 0 ? products.map((p) => p.navn) : ['Ingen produkter valgt'];
-  s5.addShape(pptx.ShapeType.roundRect, { x: 0.95, y: 1.9, w: 12.0, h: 4.9, fill: { color: 'FFFFFF' }, line: { color: COLORS.line, pt: 1 }, radius: 0.05 });
-  s5.addText(names.map((name) => `• ${name}`).join('\n'), { x: 1.2, y: 2.25, w: 11.4, h: 4.2, fontSize: 14, color: COLORS.text, breakLine: true });
-  addFooter(pptx, s5, 5);
-
-  // 6: Implementation plan
-  const s6 = pptx.addSlide();
-  addHeader(pptx, s6, 'Gjennomføring');
-  s6.addText('Foreslått implementeringsplan', { x: 0.8, y: 0.9, w: 8.5, h: 0.6, fontSize: 28, bold: true, color: COLORS.navy });
-  s6.addShape(pptx.ShapeType.line, { x: 0.8, y: 1.45, w: 11.8, h: 0, line: { color: COLORS.navy, pt: 1 } });
-
-  const steps = [
-    '1. Endelig investeringsramme bekreftes med investor.',
-    '2. Portefølje bygges iht. anbefalt allokering og valgte fond.',
-    '3. Trinnvis innfasing gjennomføres for å redusere timing-risiko.',
-    '4. Kvartalsvis oppfølging: avkastning, risiko og eventuelle rebalanseringer.'
-  ];
-  s6.addShape(pptx.ShapeType.roundRect, { x: 0.95, y: 1.95, w: 12.0, h: 4.8, fill: { color: 'FFFFFF' }, line: { color: COLORS.line, pt: 1 }, radius: 0.05 });
-  s6.addText(steps.join('\n\n'), { x: 1.2, y: 2.25, w: 11.4, h: 4.1, fontSize: 14, color: COLORS.text, breakLine: true });
-  addFooter(pptx, s6, 6);
-
-  // 7: Disclaimer
-  const s7 = pptx.addSlide();
-  addHeader(pptx, s7, 'Forbehold');
-  s7.addText('Viktig informasjon', { x: 0.8, y: 0.9, w: 8.5, h: 0.6, fontSize: 28, bold: true, color: COLORS.navy });
-  s7.addShape(pptx.ShapeType.line, { x: 0.8, y: 1.45, w: 11.8, h: 0, line: { color: COLORS.navy, pt: 1 } });
-  s7.addShape(pptx.ShapeType.roundRect, { x: 0.95, y: 1.95, w: 12.0, h: 4.9, fill: { color: 'FFF7ED' }, line: { color: 'FCD34D', pt: 1 }, radius: 0.05 });
-  s7.addText(
-    'Dette investeringsforslaget er utarbeidet som beslutningsstøtte. Historisk avkastning er ingen garanti for fremtidig avkastning. ' +
-    'Verdien av investeringer kan både stige og falle. Tallene i presentasjonen bygger på data i Pensum-plattformen per rapportdato og angitte forutsetninger i modellen.',
-    { x: 1.2, y: 2.3, w: 11.4, h: 2.1, fontSize: 13, color: COLORS.text, breakLine: true }
-  );
-  if (data.malConfig?.navn || data.malConfig?.fasteSider || data.malConfig?.dynamiskeSider) {
-    s7.addText(
-      `Malmetadata: ${data.malConfig?.navn || '—'} | Faste sider: ${data.malConfig?.fasteSider || '—'} | Dynamiske sider: ${data.malConfig?.dynamiskeSider || '—'}`,
-      { x: 1.2, y: 5.15, w: 11.4, h: 0.4, fontSize: 10, color: COLORS.muted }
-    );
-  }
-  addFooter(pptx, s7, 7);
-
+  const prepared = prepareData(data);
+  renderFixedSlides(pptx, prepared);
+  prepared.dynamicPages.forEach((p) => renderDynamicPage(pptx, p, prepared));
   return pptx;
 }
 
@@ -329,7 +264,6 @@ function buildSimplePdfBuffer(data) {
     `Horisont: ${Math.max(1, Math.round(n(data.horisont, 10)))} år`,
     `Forventet avkastning: ${formatPercent(data.vektetAvkastning)} p.a.`
   ];
-
   const streamCmd = rows.map((line, i) => {
     const y = 810 - (i * 20);
     return `BT /F1 ${i < 2 ? 20 : 12} Tf 50 ${y} Td (${escapePdfText(line)}) Tj ET`;
@@ -361,13 +295,10 @@ function buildSimplePdfBuffer(data) {
 }
 
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   try {
     const data = req.body || {};
-
     try {
       const PptxGenJS = getPptxConstructor();
       if (!PptxGenJS) throw new Error('pptxgenjs ikke tilgjengelig eller ugyldig eksport');
@@ -375,6 +306,7 @@ export default async function handler(req, res) {
       const buffer = await pptx.write({ outputType: 'nodebuffer' });
       const filnavn = `Pensum_Investeringsforslag_${(data.kundeNavn || 'Kunde').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pptx`;
       res.setHeader('X-Pensum-Output-Format', 'pptx');
+      res.setHeader('X-Pensum-Template-Applied', data?.malConfig?.filnavn ? 'metadata-mode' : 'no-template');
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
       res.setHeader('Content-Disposition', `attachment; filename="${filnavn}"`);
       res.setHeader('Content-Length', buffer.length);
