@@ -3199,9 +3199,6 @@ export default function PensumPrognoseModell() {
                   </table>
                 </div>
 
-                <div className="mt-4 text-xs text-gray-500 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                  <strong>Viktig informasjon:</strong> Historisk avkastning er ingen garanti for fremtidig avkastning. Nøkkeltall for Årlig 3 år og Risiko 3 år beregnes automatisk fra siste tilgjengelige tre kalenderår der data finnes. Avkastningen kan bli negativ som følge av kurstap. Avkastning for enkeltfond er netto etter alle løpende kostnader. Avkastning for fondsporteføljer er beregnet etter et kostnadsestimat på 1,2% per år. Alternative investeringer har begrenset likviditet og lang bindingstid.
-                </div>
               </div>
             </div>
           </div>
@@ -4261,8 +4258,8 @@ export default function PensumPrognoseModell() {
                   </div>
                   <div className="p-6 space-y-4">
                     <p className="text-sm text-gray-600">
-                      Last opp en PowerPoint/PDF-mal i admin, og marker hvilke sider som er faste og dynamiske.
-                      Dette er grunnlaget for å få rapporten til å ligne presentasjonsmalen deres.
+                      Last opp malfil og marker hvilke sider som er faste og dynamiske.
+                      Maloppsettet lagres i admin og brukes som styringsdata i genereringen (selve PPT/PDF-filen importeres ikke direkte i denne versjonen).
                     </p>
 
                     <div className="grid md:grid-cols-2 gap-4">
