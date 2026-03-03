@@ -165,6 +165,9 @@ export default async function handler(req, res) {
 
   try {
     const data = req.body || {};
+    const pptx = buildPptx(data);
+    const buffer = await pptx.write({ outputType: 'nodebuffer' });
+    const filnavn = `Pensum_Investeringsforslag_${(data.kundeNavn || 'Kunde').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pptx`;
 
     try {
       const dynamicImport = new Function('m', 'return import(m)');
