@@ -564,6 +564,12 @@ export default function PensumPrognoseModell() {
     dynamiskeSider: '4-9',
     dynamiskBeskrivelse: 'Side 4: Porteføljen i dag\nSide 5: Aksjeandel vs verdensindeks\nSide 6: Verdensindeksen\nSide 7: Pensums porteføljeforslag\nSide 8: Avkastning\nSide 9: Risiko og månedstabeller'
   });
+
+  const MAX_TEMPLATE_PAYLOAD_BYTES = 3.5 * 1024 * 1024;
+  const stripTemplateBinaryForStorage = (config) => ({
+    ...config,
+    filDataUrl: ''
+  });
   const erGyldigFasteSider = useMemo(() => validerSiderFormat(pdfMalConfig.fasteSider), [pdfMalConfig.fasteSider]);
   const erGyldigDynamiskeSider = useMemo(() => validerSiderFormat(pdfMalConfig.dynamiskeSider), [pdfMalConfig.dynamiskeSider]);
   const erKlarForLagringAvMal = useMemo(() => (
@@ -599,7 +605,7 @@ export default function PensumPrognoseModell() {
 
         const malValue = await storageGet('pensum_admin_pdf_mal');
         if (malValue) {
-          setPdfMalConfig(JSON.parse(malValue));
+          setPdfMalConfig({ ...JSON.parse(malValue), filDataUrl: '' });
         }
       } catch (e) {
         console.log('Kunne ikke laste admin-data:', e);
@@ -1576,10 +1582,15 @@ export default function PensumPrognoseModell() {
           dynamiskBeskrivelse: pdfMalConfig.dynamiskBeskrivelse
         }
       };
+      const serializedPayload = JSON.stringify(payload);
+      if (serializedPayload.length > MAX_TEMPLATE_PAYLOAD_BYTES) {
+        throw new Error('Malfilen er for stor til å sendes til serverless-funksjonen (Request Entity Too Large). Komprimer malen (bilder), eller last opp en mindre PPTX (helst under 3 MB).');
+      }
+
       const res = await fetch('/api/generate-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: serializedPayload,
       });
       if (!res.ok) {
         let melding = await res.text();
@@ -4323,7 +4334,7 @@ export default function PensumPrognoseModell() {
                                   filtype: fil.type || 'application/octet-stream',
                                   filDataUrl: typeof reader.result === 'string' ? reader.result : ''
                                 }));
-                                setAdminMelding('Mal lastet inn lokalt. Trykk "Lagre maloppsett" for å lagre i admin.');
+                                setAdminMelding('Mal lastet inn lokalt i nettleseren. Trykk "Lagre maloppsett" for å lagre sideoppsett i admin.');
                               };
                               reader.onerror = () => setAdminMelding('Feil ved lesing av malfil. Prøv på nytt.');
                               reader.readAsDataURL(fil);
@@ -4389,8 +4400,8 @@ export default function PensumPrognoseModell() {
                             return;
                           }
                           try {
-                            await storageSet('pensum_admin_pdf_mal', JSON.stringify(pdfMalConfig));
-                            setAdminMelding('Malmapping lagret i admin (fallback til lokal lagring brukes hvis window.storage mangler).');
+                            await storageSet('pensum_admin_pdf_mal', JSON.stringify(stripTemplateBinaryForStorage(pdfMalConfig)));
+                            setAdminMelding('Malmapping lagret i admin. Selve malfilen lagres kun i denne nettleserøkten (for å unngå lagringskvote-feil).');
                           } catch (err) {
                             setAdminMelding('Feil ved lagring av maloppsett: ' + err.message);
                           }
@@ -4421,8 +4432,8 @@ export default function PensumPrognoseModell() {
                     </div>
 
                     <div className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg p-3">
-                      <strong>Status:</strong> Opplastet mal lagres nå i admin slik at du kan definere faste/dynamiske sider.
-                      Selve PDF-generatoren kan i neste steg bruke dette oppsettet til å rendere side 4–9 med kundespesifikt innhold.
+                      <strong>Status:</strong> Sideoppsettet lagres i admin. Malfilens binærdata holdes kun i aktiv nettleserøkt for å unngå kvote-feil i lokal lagring.
+                      For template-merge må malfil lastes opp i samme økt før generering.
                     </div>
                     <div className="text-xs text-gray-500">
                       Gyldige sideformater: <code>1-3,10+</code>, <code>4-9</code>, <code>2,5,7</code>.
