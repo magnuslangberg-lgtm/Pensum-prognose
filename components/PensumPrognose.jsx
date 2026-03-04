@@ -56,7 +56,6 @@ function beregnAllokering(likvid, pe, eiendom, profilNavn) {
   ];
 }
 
-const RAPPORT_DATO = '31.01.2026';
 const HISTORIKK_ARFELT = ['aar2026', 'aar2025', 'aar2024', 'aar2023', 'aar2022'];
 
 function beregnProduktNokkeltall(produkt) {
@@ -91,20 +90,32 @@ function validerSiderFormat(tekst) {
 }
 
 
-const RAPPORT_MAANED = '2026-01';
-const HISTORIKK_2026_YTD = {
-  'global-core-active': -2.0,
-  'global-edge': 0.6,
-  'basis': -0.1,
-  'global-hoyrente': 0.7,
-  'nordisk-hoyrente': 0.6,
-  'norge-a': 2.2,
-  'energy-a': 7.8,
-  'banking-d': -1.1,
-  'financial-d': 0.9
+// Månedlig YTD-avkastning per rapportmåned.
+// Legg til ny rad her når nye avkastningstall er klare (dato = siste handelsdag i måneden).
+const HISTORIKK_YTD_PER_MAANED = {
+  '2026-01': {
+    dato: '31.01.2026',
+    data: {
+      'global-core-active': -2.0,
+      'global-edge': 0.6,
+      'basis': -0.1,
+      'global-hoyrente': 0.7,
+      'nordisk-hoyrente': 0.6,
+      'norge-a': 2.2,
+      'energy-a': 7.8,
+      'banking-d': -1.1,
+      'financial-d': 0.9
+    }
+  }
+  // Eksempel for neste måned: '2026-02': { dato: '28.02.2026', data: { 'global-core-active': X.X, ... } }
 };
 
+const RAPPORT_MAANED = Object.keys(HISTORIKK_YTD_PER_MAANED).sort().at(-1) || '';
+const RAPPORT_DATO = RAPPORT_MAANED ? HISTORIKK_YTD_PER_MAANED[RAPPORT_MAANED].dato : '';
+
 const oppdaterHistorikkTilRapportDato = (historikkMap = {}) => {
+  if (!RAPPORT_MAANED) return historikkMap;
+  const ytdData = HISTORIKK_YTD_PER_MAANED[RAPPORT_MAANED].data;
   const oppdatert = {};
   Object.entries(historikkMap || {}).forEach(([id, historikk]) => {
     const originalData = Array.isArray(historikk?.data) ? historikk.data : [];
@@ -116,7 +127,7 @@ const oppdaterHistorikkTilRapportDato = (historikkMap = {}) => {
     }
 
     const sistePunkt = originalData[originalData.length - 1];
-    const ytd = HISTORIKK_2026_YTD[id];
+    const ytd = ytdData[id];
     const faktor = typeof ytd === 'number' ? (1 + (ytd / 100)) : 1;
     const nyVerdi = parseFloat((sistePunkt.verdi * faktor).toFixed(2));
 
@@ -525,7 +536,7 @@ export default function PensumPrognoseModell() {
   const [adminPassord, setAdminPassord] = useState('');
   const [erAdmin, setErAdmin] = useState(false);
   const [adminMelding, setAdminMelding] = useState('');
-  const ADMIN_PASSORD = 'pensum2024'; // Enkelt passord - kan endres
+  const ADMIN_PASSORD = process.env.NEXT_PUBLIC_ADMIN_PASSORD || 'pensum2024';
 
   const storageGet = async (key) => {
     if (typeof window === 'undefined') return null;
@@ -570,6 +581,7 @@ export default function PensumPrognoseModell() {
     ...config,
     filDataUrl: ''
   });
+  const malKreverOpplasting = Boolean(pdfMalConfig.filnavn) && !pdfMalConfig.filDataUrl;
   const erGyldigFasteSider = useMemo(() => validerSiderFormat(pdfMalConfig.fasteSider), [pdfMalConfig.fasteSider]);
   const erGyldigDynamiskeSider = useMemo(() => validerSiderFormat(pdfMalConfig.dynamiskeSider), [pdfMalConfig.dynamiskeSider]);
   const erKlarForLagringAvMal = useMemo(() => (
@@ -2094,6 +2106,14 @@ export default function PensumPrognoseModell() {
                   })}
                 </div>
               </div>
+
+              {/* Template-advarsel */}
+              {malKreverOpplasting && (
+                <div className="flex items-start gap-3 p-3 bg-amber-50 rounded-xl border border-amber-200">
+                  <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                  <p className="text-xs text-amber-800">Malfil «{pdfMalConfig.filnavn}» er ikke tilgjengelig i denne økten. Presenter genereres uten template-merge. Last opp filen i Admin for å bruke din PPTX-mal.</p>
+                </div>
+              )}
 
               {/* AI-info */}
               <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-xl border border-blue-100">
@@ -4431,6 +4451,12 @@ export default function PensumPrognoseModell() {
                       </button>
                     </div>
 
+                    {malKreverOpplasting && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+                        <strong>Malfil mangler:</strong> «{pdfMalConfig.filnavn}» er konfigurert, men binærdataen er ikke tilgjengelig i denne nettleserøkten.
+                        Last opp filen på nytt over for å bruke template-merge ved generering.
+                      </div>
+                    )}
                     <div className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg p-3">
                       <strong>Status:</strong> Sideoppsettet lagres i admin. Malfilens binærdata holdes kun i aktiv nettleserøkt for å unngå kvote-feil i lokal lagring.
                       For template-merge må malfil lastes opp i samme økt før generering.
