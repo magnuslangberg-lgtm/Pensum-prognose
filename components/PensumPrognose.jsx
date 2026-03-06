@@ -2220,6 +2220,14 @@ export default function PensumPrognoseModell() {
                 </div>
               </div>
 
+              {/* Template-advarsel */}
+              {malKreverOpplasting && (
+                <div className="flex items-start gap-3 p-3 bg-amber-50 rounded-xl border border-amber-200">
+                  <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
+                  <p className="text-xs text-amber-800">Malfil «{pdfMalConfig.filnavn}» er ikke tilgjengelig i denne økten. Presenter genereres uten template-merge. Last opp filen i Admin for å bruke din PPTX-mal.</p>
+                </div>
+              )}
+
               {/* AI-info */}
               <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-xl border border-blue-100">
                 <svg className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
