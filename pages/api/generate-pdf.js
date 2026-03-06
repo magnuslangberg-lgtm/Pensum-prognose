@@ -170,17 +170,31 @@ function normalizeData(data) {
       const sorted = [...serie.data]
         .filter((p) => typeof p?.dato === 'string' && Number.isFinite(num(p?.verdi, NaN)))
         .sort((a, b) => String(a.dato).localeCompare(String(b.dato)));
+
+      const monthClose = new Map();
+      sorted.forEach((punkt) => {
+        const raw = String(punkt.dato);
+        const match = raw.match(/^(\d{4})-(\d{2})/);
+        if (!match) return;
+        const monthKey = `${match[1]}-${match[2]}`;
+        const prev = monthClose.get(monthKey);
+        if (!prev || raw >= prev.dato) {
+          monthClose.set(monthKey, { dato: raw, verdi: num(punkt.verdi, NaN) });
+        }
+      });
+
+      const monthKeys = Array.from(monthClose.keys()).sort();
       const perMonth = Array(12).fill(null);
-      for (let i = 1; i < sorted.length; i += 1) {
-        const prev = num(sorted[i - 1].verdi, NaN);
-        const curr = num(sorted[i].verdi, NaN);
-        if (!Number.isFinite(prev) || !Number.isFinite(curr) || prev === 0) continue;
-        const m = Number(String(sorted[i].dato).split('-')[1]);
+      for (let i = 1; i < monthKeys.length; i += 1) {
+        const prevClose = monthClose.get(monthKeys[i - 1])?.verdi;
+        const currClose = monthClose.get(monthKeys[i])?.verdi;
+        if (!Number.isFinite(prevClose) || prevClose === 0 || !Number.isFinite(currClose)) continue;
+        const m = Number(monthKeys[i].split('-')[1]);
         if (m >= 1 && m <= 12) {
-          perMonth[m - 1] = ((curr / prev) - 1) * 100;
+          perMonth[m - 1] = ((currClose / prevClose) - 1) * 100;
         }
       }
-      const latestDate = sorted[sorted.length - 1]?.dato || '';
+      const latestDate = monthKeys[monthKeys.length - 1] || '';
       const yearLabel = String(latestDate).slice(0, 4) || '2026';
       return {
         year: yearLabel,
