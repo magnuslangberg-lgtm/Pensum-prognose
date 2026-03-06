@@ -1,22 +1,13 @@
 import fs from 'fs';
 import path from 'path';
+import PptxGenJSImport from 'pptxgenjs';
+import JSZipImport from 'jszip';
 
-function loadOptionalModule(name) {
-  try {
-    const req = eval('require');
-    return req(name);
-  } catch (_) {
-    return null;
-  }
-}
+const PptxGenJS = typeof PptxGenJSImport === 'function'
+  ? PptxGenJSImport
+  : (PptxGenJSImport?.default || PptxGenJSImport?.PptxGenJS);
 
-function getPptxModule() {
-  return loadOptionalModule('pptxgenjs');
-}
-
-function getJSZipModule() {
-  return loadOptionalModule('jszip');
-}
+const JSZip = JSZipImport?.default || JSZipImport;
 
 const COLORS = {
   navy: '0D2240',
@@ -93,14 +84,6 @@ function pickNewestTemplateFromRepo() {
   };
 }
 
-function resolvePptxConstructor(mod) {
-  if (typeof mod === 'function') return mod;
-  if (mod && typeof mod.default === 'function') return mod.default;
-  if (mod && mod.default && typeof mod.default.default === 'function') return mod.default.default;
-  if (mod && typeof mod.PptxGenJS === 'function') return mod.PptxGenJS;
-  return null;
-}
-
 function parsePageSpec(spec = '', maxPage = TOTAL_SLIDES) {
   const set = new Set();
   String(spec).split(',').map((p) => p.trim()).filter(Boolean).forEach((token) => {
@@ -144,6 +127,16 @@ function normalizeData(data) {
   const selectedProducts = selectedProductIds
     .map((id) => produkterById.get(id))
     .filter(Boolean);
+
+  const productRows = selectedProducts.map((p) => ({
+    id: p.id,
+    navn: PRODUCT_NAME[p.id] || p.navn || p.id,
+    y2026: num(p.aar2026, NaN),
+    y2025: num(p.aar2025, NaN),
+    y2024: num(p.aar2024, NaN),
+    y2023: num(p.aar2023, NaN),
+    y2022: num(p.aar2022, NaN)
+  }));
 
   const yearlyFields = [
     { year: 2022, key: 'aar2022' },
@@ -201,9 +194,27 @@ function normalizeData(data) {
     yearlyBase,
     yearlyPensum,
     yearlyWorld,
+    productRows,
     monthlyRows: historyRows.length > 0 ? historyRows : [{ year: '2026', vals: Array(12).fill(0) }],
     malConfig: data.malConfig || {}
   };
+}
+
+function calcRiskRows(monthlyRows = []) {
+  return monthlyRows.map((r) => {
+    const vals = (r.vals || []).map((v) => num(v, 0) / 100);
+    const n = vals.length || 1;
+    const mean = vals.reduce((a, b) => a + b, 0) / n;
+    const variance = vals.reduce((a, b) => a + ((b - mean) ** 2), 0) / n;
+    const vol = Math.sqrt(variance) * Math.sqrt(12) * 100;
+    const annual = (((1 + mean) ** 12) - 1) * 100;
+    return {
+      year: r.year,
+      annual: Number(annual.toFixed(2)),
+      vol: Number(vol.toFixed(2)),
+      sharpe: Number((vol > 0 ? ((annual - 3) / vol) : 0).toFixed(2))
+    };
+  });
 }
 
 function buildPage(pptx, d, pageNo) {
@@ -217,6 +228,37 @@ function buildPage(pptx, d, pageNo) {
   }
   if (pageNo === 6 && d.alloc.length > 0) {
     s.addChart(pptx.ChartType.pie, [{ name: 'Andel', labels: d.alloc.map((a) => a.navn), values: d.alloc.map((a) => a.vekt) }], { x: 0.9, y: 1.8, w: 4.6, h: 3.4, showLegend: false });
+    s.addTable([
+      ['Aktivaklasse', 'Vekt'],
+      ...d.alloc.map((a) => [a.navn, `${a.vekt.toFixed(1)}%`])
+    ], { x: 5.9, y: 1.9, w: 6.4, fontSize: 11, border: { pt: 1, color: COLORS.line } });
+  }
+  if (pageNo === 7) {
+    const allocVals = d.alloc.map((a) => Number(((a.vekt / 100) * d.total).toFixed(0)));
+    if (allocVals.length > 0) {
+      s.addChart(pptx.ChartType.bar, [{ name: 'Beløp', labels: d.alloc.map((a) => a.navn), values: allocVals }], {
+        x: 0.9, y: 1.8, w: 11.8, h: 3.9, showLegend: false, barDir: 'col'
+      });
+    }
+    s.addText('Beløpsfordeling basert på valgt allokering.', { x: 0.9, y: 5.95, w: 11.8, h: 0.4, fontSize: 12, color: COLORS.muted });
+  }
+  if (pageNo === 8) {
+    const rows = d.productRows.length > 0
+      ? d.productRows.slice(0, 10).map((p) => [p.navn, Number.isFinite(p.y2026) ? pct(p.y2026) : '—', Number.isFinite(p.y2025) ? pct(p.y2025) : '—'])
+      : [['Ingen produkter valgt', '—', '—']];
+    s.addTable([
+      ['Produkt', '2026 YTD', '2025'],
+      ...rows
+    ], { x: 0.9, y: 1.9, w: 11.8, fontSize: 10, border: { pt: 1, color: COLORS.line } });
+  }
+  if (pageNo === 9) {
+    const rows = d.productRows.length > 0
+      ? d.productRows.slice(0, 10).map((p) => [p.navn, Number.isFinite(p.y2024) ? pct(p.y2024) : '—', Number.isFinite(p.y2023) ? pct(p.y2023) : '—', Number.isFinite(p.y2022) ? pct(p.y2022) : '—'])
+      : [['Ingen produkter valgt', '—', '—', '—']];
+    s.addTable([
+      ['Produkt', '2024', '2023', '2022'],
+      ...rows
+    ], { x: 0.9, y: 1.9, w: 11.8, fontSize: 10, border: { pt: 1, color: COLORS.line } });
   }
   if (pageNo === 10) {
     s.addChart(pptx.ChartType.line, [
@@ -224,6 +266,13 @@ function buildPage(pptx, d, pageNo) {
       { name: 'Forslag', labels: d.seriesYears, values: d.yearlyPensum },
       { name: 'Verdensindeks', labels: d.seriesYears, values: d.yearlyWorld }
     ], { x: 0.9, y: 1.8, w: 11.9, h: 3.8, showLegend: true, legendPos: 'b' });
+  }
+  if (pageNo === 11) {
+    const riskRows = calcRiskRows(d.monthlyRows);
+    s.addTable([
+      ['Serie', 'Årlig avkastning', 'Volatilitet', 'Sharpe'],
+      ...riskRows.map((r) => [r.year, `${r.annual.toFixed(1)}%`, `${r.vol.toFixed(1)}%`, `${r.sharpe.toFixed(2)}`])
+    ], { x: 0.9, y: 1.9, w: 11.8, fontSize: 11, border: { pt: 1, color: COLORS.line } });
   }
   if (pageNo === 12) {
     s.addTable([['År', ...MONTHS, 'År'], ...d.monthlyRows.map((r) => [r.year, ...r.vals.map((v) => v.toFixed(1)), r.vals.reduce((a, b) => a + b, 0).toFixed(1)])], { x: 0.8, y: 1.9, w: 12, colW: [0.8, ...Array(12).fill(0.75), 1.0], fontSize: 9 });
@@ -264,8 +313,6 @@ function dynamicSlideText(pageNo, d) {
 
 async function applyTemplatePptx(templateBuffer, payload) {
   const d = normalizeData(payload);
-  const JSZipMod = getJSZipModule();
-  const JSZip = JSZipMod?.default || JSZipMod;
   if (!JSZip || !JSZip.loadAsync) throw new Error('jszip ikke tilgjengelig i runtime');
   const zip = await JSZip.loadAsync(templateBuffer);
   const fixedSet = parsePageSpec(d?.malConfig?.fasteSider || '1-5,14+', TOTAL_SLIDES);
@@ -362,8 +409,6 @@ export default async function handler(req, res) {
     }
 
     try {
-      const PptxModule = getPptxModule();
-      const PptxGenJS = resolvePptxConstructor(PptxModule);
       if (!PptxGenJS) throw new Error('pptxgenjs ikke tilgjengelig');
       const pptx = buildPptx(PptxGenJS, data);
       const buffer = await pptx.write({ outputType: 'nodebuffer' });
