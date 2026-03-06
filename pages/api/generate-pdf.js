@@ -49,7 +49,7 @@ function pct(v) {
   return `${num(v).toFixed(1)}%`;
 }
 
-function pickNewestTemplateFromRepo() {
+function pickTemplateFromRepo(preferredFilename = '') {
   const baseDir = process.cwd();
   const templateDirs = [
     path.join(baseDir, 'uploads'),
@@ -67,6 +67,7 @@ function pickNewestTemplateFromRepo() {
       const stat = fs.statSync(fullPath);
       candidates.push({
         fullPath,
+        filename: entry.name,
         relativePath: path.relative(baseDir, fullPath),
         mtimeMs: stat.mtimeMs
       });
@@ -74,8 +75,15 @@ function pickNewestTemplateFromRepo() {
   });
 
   if (candidates.length === 0) return null;
-  candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
-  const chosen = candidates[0];
+
+  const preferred = String(preferredFilename || '').trim().toLowerCase();
+  const exactMatch = preferred
+    ? candidates.find((c) => c.filename.toLowerCase() === preferred)
+    : null;
+
+  const defaultMatch = candidates.find((c) => /mal.*investeringsportefølje.*2026.*\.pptx$/i.test(c.filename));
+  const chosen = exactMatch || defaultMatch || [...candidates].sort((a, b) => b.mtimeMs - a.mtimeMs)[0];
+
   return {
     source: `repo:${chosen.relativePath}`,
     filename: path.basename(chosen.fullPath),
@@ -385,20 +393,20 @@ export default async function handler(req, res) {
   try {
     const data = req.body || {};
     const uploadedTemplateData = parseDataUrlToBuffer(data?.malConfig?.filDataUrl || '');
-    const repoTemplateData = uploadedTemplateData ? null : pickNewestTemplateFromRepo();
+    const repoTemplateData = uploadedTemplateData ? null : pickTemplateFromRepo(data?.malConfig?.filnavn || '');
     const templateData = uploadedTemplateData || repoTemplateData;
 
     if (templateData && /presentationml|ms-powerpoint/.test(templateData.mime)) {
       try {
         const { buffer, replacements } = await applyTemplatePptx(templateData.buffer, data);
-        if (replacements === 0) {
-          throw new Error('Ingen placeholders funnet i malen (0 erstatninger).');
-        }
         const filnavn = `Pensum_Investeringsforslag_${(data.kundeNavn || 'Kunde').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pptx`;
         res.setHeader('X-Pensum-Output-Format', 'pptx-template');
         res.setHeader('X-Pensum-Template-Source', templateData.source || 'upload');
         res.setHeader('X-Pensum-Template-Applied', `${data?.malConfig?.fasteSider || '1-5,14+'}|${data?.malConfig?.dynamiskeSider || '6-13'}`);
         res.setHeader('X-Pensum-Template-Replacements', String(replacements));
+        if (replacements === 0) {
+          res.setHeader('X-Pensum-Template-Warning', encodeURIComponent('Ingen placeholders funnet i malen (0 erstatninger). Returnerer malen uendret.'));
+        }
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
         res.setHeader('Content-Disposition', `attachment; filename="${filnavn}"`);
         return res.send(buffer);

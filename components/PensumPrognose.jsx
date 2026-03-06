@@ -91,9 +91,58 @@ function validerSiderFormat(tekst) {
   return biter.every((bit) => /^(\d+|\d+-\d+|\d+\+)$/.test(bit));
 }
 
+function skalerVekterTilHundreListe(items = []) {
+  const liste = Array.isArray(items) ? items.map((i) => ({ ...i })) : [];
+  if (liste.length === 0) return liste;
+  const total = liste.reduce((s, i) => s + (Number(i.vekt) || 0), 0);
+  if (total <= 0) {
+    const lik = Number((100 / liste.length).toFixed(1));
+    const fordelt = liste.map((i) => ({ ...i, vekt: lik }));
+    const sum = fordelt.reduce((s, i) => s + i.vekt, 0);
+    fordelt[0].vekt = Number((fordelt[0].vekt + (100 - sum)).toFixed(1));
+    return fordelt;
+  }
+  const skalert = liste.map((i) => ({ ...i, vekt: Number((((Number(i.vekt) || 0) / total) * 100).toFixed(1)) }));
+  const sum = skalert.reduce((s, i) => s + i.vekt, 0);
+  const diff = Number((100 - sum).toFixed(1));
+  if (Math.abs(diff) > 0) skalert[0].vekt = Number((skalert[0].vekt + diff).toFixed(1));
+  return skalert;
+}
+
+function fordelRestVektListe(items = [], index, newVekt) {
+  const liste = Array.isArray(items) ? items.map((i) => ({ ...i })) : [];
+  if (liste.length === 0 || index < 0 || index >= liste.length) return liste;
+  const clamped = Math.max(0, Math.min(100, Number(newVekt) || 0));
+  liste[index].vekt = Number(clamped.toFixed(1));
+  const andreIdx = liste.map((_, i) => i).filter((i) => i !== index);
+  if (andreIdx.length === 0) {
+    liste[index].vekt = 100;
+    return liste;
+  }
+  const rest = 100 - liste[index].vekt;
+  const sumAndre = andreIdx.reduce((s, i) => s + (Number(liste[i].vekt) || 0), 0);
+  if (sumAndre <= 0) {
+    const lik = Number((rest / andreIdx.length).toFixed(1));
+    andreIdx.forEach((i) => { liste[i].vekt = lik; });
+  } else {
+    andreIdx.forEach((i) => {
+      const andel = (Number(liste[i].vekt) || 0) / sumAndre;
+      liste[i].vekt = Number((andel * rest).toFixed(1));
+    });
+  }
+  const sum = liste.reduce((s, i) => s + i.vekt, 0);
+  const diff = Number((100 - sum).toFixed(1));
+  if (Math.abs(diff) > 0) {
+    const justerIdx = andreIdx[0] ?? index;
+    liste[justerIdx].vekt = Number((liste[justerIdx].vekt + diff).toFixed(1));
+  }
+  return liste;
+}
+
 
 const RAPPORT_MAANED = '2026-02';
 const RAPPORT_DATO_ISO = '2026-02-28';
+const DEFAULT_TEMPLATE_FILENAME = 'Mal - Forslag til investeringsportefølje 2026.pptx';
 const RAPPORT_DATO_OBJEKT = (() => {
   const [d, m, y] = RAPPORT_DATO.split('.').map(Number);
   return new Date(y, m - 1, d);
@@ -235,6 +284,8 @@ export default function PensumPrognoseModell() {
   const [activeTab, setActiveTab] = useState('input');
   const [showPessimistic, setShowPessimistic] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
+  const [autoRebalanserAllokering, setAutoRebalanserAllokering] = useState(true);
+  const [autoRebalanserPensum, setAutoRebalanserPensum] = useState(true);
   const [expandedCategories, setExpandedCategories] = useState({ aksjer: false, renter: false });
   const [expandedKundeKategorier, setExpandedKundeKategorier] = useState({ likvide: true, illikvide: true, pe: false, eiendom: false });
 
@@ -654,13 +705,13 @@ export default function PensumPrognoseModell() {
     return true;
   };
   const [pdfMalConfig, setPdfMalConfig] = useState({
-    navn: '',
-    filnavn: '',
+    navn: 'Pensum standardmal 2026',
+    filnavn: DEFAULT_TEMPLATE_FILENAME,
     filtype: '',
     filDataUrl: '',
-    fasteSider: '1-3,10+',
-    dynamiskeSider: '4-9',
-    dynamiskBeskrivelse: 'Side 4: Porteføljen i dag\nSide 5: Aksjeandel vs verdensindeks\nSide 6: Verdensindeksen\nSide 7: Pensums porteføljeforslag\nSide 8: Avkastning\nSide 9: Risiko og månedstabeller'
+    fasteSider: '1-5,14+',
+    dynamiskeSider: '6-13',
+    dynamiskBeskrivelse: 'Side 6: Allokering\nSide 7: Beløpsfordeling\nSide 8: Produkter 2026/2025\nSide 9: Produkter 2024/2023/2022\nSide 10: Avkastningsgraf\nSide 11: Risikomål\nSide 12: Månedstabell\nSide 13: Oppsummering'
   });
 
   const MAX_TEMPLATE_PAYLOAD_BYTES = 4.0 * 1024 * 1024;
@@ -677,7 +728,9 @@ export default function PensumPrognoseModell() {
     erGyldigDynamiskeSider
   ), [pdfMalConfig, erGyldigFasteSider, erGyldigDynamiskeSider]);
   const malKreverOpplasting = useMemo(() => (
-    Boolean(pdfMalConfig?.filnavn) && !pdfMalConfig?.filDataUrl
+    Boolean(pdfMalConfig?.filnavn) &&
+    !pdfMalConfig?.filDataUrl &&
+    String(pdfMalConfig?.filnavn).toLowerCase() !== DEFAULT_TEMPLATE_FILENAME.toLowerCase()
   ), [pdfMalConfig?.filnavn, pdfMalConfig?.filDataUrl]);
   
   // Standard avkastningsrater (kan endres av admin)
@@ -734,7 +787,16 @@ export default function PensumPrognoseModell() {
 
         const malValue = await storageGet('pensum_admin_pdf_mal');
         if (malValue) {
-          setPdfMalConfig({ ...JSON.parse(malValue), filDataUrl: '' });
+          const lagret = JSON.parse(malValue);
+          setPdfMalConfig((prev) => ({
+            ...prev,
+            ...lagret,
+            filnavn: lagret?.filnavn || DEFAULT_TEMPLATE_FILENAME,
+            navn: lagret?.navn || 'Pensum standardmal 2026',
+            fasteSider: lagret?.fasteSider || '1-5,14+',
+            dynamiskeSider: lagret?.dynamiskeSider || '6-13',
+            filDataUrl: ''
+          }));
         }
       } catch (e) {
         console.log('Kunne ikke laste admin-data:', e);
@@ -835,10 +897,45 @@ export default function PensumPrognoseModell() {
   };
 
   const oppdaterPensumVekt = (id, nyVekt) => {
-    setPensumAllokering(prev => prev.map(p => p.id === id ? { ...p, vekt: Math.max(0, Math.min(100, nyVekt)) } : p));
+    setPensumAllokering(prev => {
+      const idx = prev.findIndex((p) => p.id === id);
+      if (idx < 0) return prev;
+      if (!autoRebalanserPensum) {
+        return prev.map(p => p.id === id ? { ...p, vekt: Math.max(0, Math.min(100, nyVekt)) } : p);
+      }
+      return fordelRestVektListe(prev, idx, nyVekt);
+    });
   };
 
+  const normaliserPensumTil100 = useCallback(() => {
+    setPensumAllokering((prev) => skalerVekterTilHundreListe(prev));
+  }, []);
+
   const pensumTotalVekt = pensumAllokering.reduce((s, p) => s + p.vekt, 0);
+
+  const aggregertPensumEksponering = useMemo(() => {
+    const totalVekt = pensumAllokering.reduce((s, p) => s + (p.vekt || 0), 0) || 1;
+    const lagAgg = (felt) => {
+      const map = new Map();
+      pensumAllokering.forEach((p) => {
+        const data = produktEksponering?.[p.id]?.[felt];
+        if (!Array.isArray(data) || p.vekt <= 0) return;
+        const faktor = p.vekt / totalVekt;
+        data.forEach((rad) => {
+          const key = rad.navn;
+          map.set(key, (map.get(key) || 0) + ((Number(rad.vekt) || 0) * faktor));
+        });
+      });
+      return Array.from(map.entries())
+        .map(([navn, vekt]) => ({ navn, vekt: Number(vekt.toFixed(1)) }))
+        .sort((a, b) => b.vekt - a.vekt)
+        .slice(0, 8);
+    };
+    return {
+      sektorer: lagAgg('sektorer'),
+      regioner: lagAgg('regioner')
+    };
+  }, [pensumAllokering, produktEksponering]);
 
   // Beregn vektet historisk avkastning
   const beregnPensumHistorikk = useMemo(() => {
@@ -1535,11 +1632,14 @@ export default function PensumPrognoseModell() {
 
   const updateAllokeringVekt = useCallback((index, newVekt) => {
     setAllokering(prev => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], vekt: newVekt };
-      return updated;
+      if (!autoRebalanserAllokering) {
+        const updated = [...prev];
+        updated[index] = { ...updated[index], vekt: Math.max(0, Math.min(100, Number(newVekt) || 0)) };
+        return updated;
+      }
+      return fordelRestVektListe(prev, index, newVekt);
     });
-  }, []);
+  }, [autoRebalanserAllokering]);
 
   const updateAllokeringBelop = useCallback((index, newBelop) => {
     setAllokering(prev => {
@@ -1552,6 +1652,10 @@ export default function PensumPrognoseModell() {
 
   const updateAllokeringAvkastning = useCallback((index, avk) => {
     setAllokering(prev => { const u = [...prev]; u[index] = { ...u[index], avkastning: parseFloat(avk) || 0 }; return u; });
+  }, []);
+
+  const normaliserAllokeringTil100 = useCallback(() => {
+    setAllokering((prev) => skalerVekterTilHundreListe(prev));
   }, []);
 
   const toggleCategory = (cat) => setExpandedCategories(p => ({ ...p, [cat]: !p[cat] }));
@@ -1870,9 +1974,14 @@ export default function PensumPrognoseModell() {
           </div>
         </td>
         <td className="py-3 px-2">
-          <div className="flex items-center justify-center">
-            <input type="text" value={localVekt} onChange={(e) => setLocalVekt(e.target.value)} onBlur={() => updateAllokeringVekt(index, parseFloat(localVekt) || 0)} className="w-16 text-center text-sm border border-gray-200 rounded py-1.5 px-2" />
-            <span className="ml-1 text-gray-400 text-xs">%</span>
+          <div className="space-y-1">
+            <div className="flex items-center justify-center gap-1.5">
+              <button onClick={() => updateAllokeringVekt(index, (item.vekt || 0) - 0.5)} className="w-6 h-6 rounded border border-gray-200 text-gray-600 hover:bg-gray-100">−</button>
+              <input type="text" value={localVekt} onChange={(e) => setLocalVekt(e.target.value)} onBlur={() => updateAllokeringVekt(index, parseFloat(localVekt) || 0)} className="w-16 text-center text-sm border border-gray-200 rounded py-1.5 px-2" />
+              <span className="text-gray-400 text-xs">%</span>
+              <button onClick={() => updateAllokeringVekt(index, (item.vekt || 0) + 0.5)} className="w-6 h-6 rounded border border-gray-200 text-gray-600 hover:bg-gray-100">+</button>
+            </div>
+            <input type="range" min="0" max="100" step="0.5" value={item.vekt} onChange={(e) => updateAllokeringVekt(index, parseFloat(e.target.value) || 0)} className="w-full accent-blue-700" />
           </div>
         </td>
         <td className="py-3 px-2">
@@ -2634,6 +2743,15 @@ export default function PensumPrognoseModell() {
                     </div>
                   )}
                   <div className="p-6 overflow-x-auto">
+                    <div className="flex flex-wrap items-center justify-end gap-2 mb-3">
+                      <label className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1">
+                        <input type="checkbox" checked={autoRebalanserAllokering} onChange={(e) => setAutoRebalanserAllokering(e.target.checked)} className="w-3.5 h-3.5" />
+                        Auto-balanser til 100%
+                      </label>
+                      <button onClick={normaliserAllokeringTil100} className="text-xs px-3 py-1 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50">
+                        Juster til 100%
+                      </button>
+                    </div>
                     <table className="w-full">
                       <thead>
                         <tr style={{ backgroundColor: PENSUM_COLORS.lightGray }}>
@@ -2907,13 +3025,20 @@ export default function PensumPrognoseModell() {
                     <h4 className="font-semibold mb-4 flex items-center justify-between" style={{ color: PENSUM_COLORS.darkBlue }}>
                       <span>Din portefølje</span>
                       <div className="flex items-center gap-3">
+                        <label className="text-xs px-2 py-1 rounded-full border border-blue-200 text-blue-700 flex items-center gap-1.5">
+                          <input type="checkbox" checked={autoRebalanserPensum} onChange={(e) => setAutoRebalanserPensum(e.target.checked)} className="w-3.5 h-3.5" />
+                          Auto 100%
+                        </label>
+                        <button onClick={normaliserPensumTil100} className="text-xs px-2.5 py-1 rounded-full border border-blue-200 text-blue-700 hover:bg-blue-50">
+                          Juster til 100%
+                        </button>
                         {pensumLikviditet.illikvid > 0 && (
                           <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700">
                             {pensumLikviditet.illikvid}% illikvid
                           </span>
                         )}
-                        <span className={"text-sm px-3 py-1 rounded-full " + (pensumTotalVekt === 100 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
-                          Total: {pensumTotalVekt}%
+                        <span className={"text-sm px-3 py-1 rounded-full " + (Math.abs(pensumTotalVekt - 100) < 0.2 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
+                          Total: {pensumTotalVekt.toFixed(1)}%
                         </span>
                       </div>
                     </h4>
@@ -2947,9 +3072,11 @@ export default function PensumPrognoseModell() {
                               <p className="text-xs text-gray-500">{produkt.kategori === 'enkeltfond' ? 'Enkeltfond' : produkt.kategori === 'alternative' ? 'Alternativ investering' : 'Fondsportefølje'}</p>
                             </div>
                             <div className="flex items-center gap-2">
-                              <input type="range" min="0" max="100" value={produkt.vekt} onChange={(e) => oppdaterPensumVekt(produkt.id, parseInt(e.target.value))} className="w-24" />
-                              <input type="number" min="0" max="100" value={produkt.vekt} onChange={(e) => oppdaterPensumVekt(produkt.id, parseInt(e.target.value) || 0)} className="w-16 border border-gray-200 rounded py-1 px-2 text-sm text-right" />
+                              <button onClick={() => oppdaterPensumVekt(produkt.id, (produkt.vekt || 0) - 0.5)} className="w-6 h-6 rounded border border-gray-200 text-gray-600 hover:bg-gray-100">−</button>
+                              <input type="range" min="0" max="100" step="0.5" value={produkt.vekt} onChange={(e) => oppdaterPensumVekt(produkt.id, parseFloat(e.target.value) || 0)} className="w-28 accent-blue-700" />
+                              <input type="number" min="0" max="100" step="0.5" value={produkt.vekt} onChange={(e) => oppdaterPensumVekt(produkt.id, parseFloat(e.target.value) || 0)} className="w-16 border border-gray-200 rounded py-1 px-2 text-sm text-right" />
                               <span className="text-sm text-gray-500">%</span>
+                              <button onClick={() => oppdaterPensumVekt(produkt.id, (produkt.vekt || 0) + 0.5)} className="w-6 h-6 rounded border border-gray-200 text-gray-600 hover:bg-gray-100">+</button>
                             </div>
                           </div>
                         );
@@ -3050,6 +3177,38 @@ export default function PensumPrognoseModell() {
                             <span className="font-semibold" style={{ color: PENSUM_COLORS.darkBlue }}>{a.value}%</span>
                           </div>
                         ))}
+                      </div>
+                    </div>
+
+                    {/* Aggregert eksponering */}
+                    <div className="pt-4 border-t border-gray-200">
+                      <h4 className="font-semibold mb-2" style={{ color: PENSUM_COLORS.darkBlue }}>Aggregert eksponering (valgte produkter)</h4>
+                      <p className="text-xs text-gray-500 mb-3">Vektet snitt av underliggende eksponeringsdata fra Pensum-produktene.</p>
+                      <div className="space-y-4">
+                        <div>
+                          <p className="text-xs font-semibold text-gray-600 mb-1">Sektorer (top 8)</p>
+                          <ResponsiveContainer width="100%" height={170}>
+                            <BarChart data={aggregertPensumEksponering.sektorer} layout="vertical" margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
+                              <XAxis type="number" tick={{ fontSize: 10 }} />
+                              <YAxis type="category" dataKey="navn" width={95} tick={{ fontSize: 10 }} />
+                              <Tooltip formatter={(v) => [v + '%', 'Vekt']} />
+                              <Bar dataKey="vekt" fill={PENSUM_COLORS.lightBlue} radius={[0, 4, 4, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-gray-600 mb-1">Regioner (top 8)</p>
+                          <ResponsiveContainer width="100%" height={170}>
+                            <BarChart data={aggregertPensumEksponering.regioner} layout="vertical" margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
+                              <XAxis type="number" tick={{ fontSize: 10 }} />
+                              <YAxis type="category" dataKey="navn" width={95} tick={{ fontSize: 10 }} />
+                              <Tooltip formatter={(v) => [v + '%', 'Vekt']} />
+                              <Bar dataKey="vekt" fill={PENSUM_COLORS.teal} radius={[0, 4, 4, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -4546,18 +4705,18 @@ export default function PensumPrognoseModell() {
                       <div>
                         <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Malfil</label>
                         <label className="mt-1 block border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
-                          <p className="text-sm text-gray-600">Klikk for å velge .ppt/.pptx/.pdf</p>
+                          <p className="text-sm text-gray-600">Klikk for å velge .ppt/.pptx</p>
                           <p className="text-xs text-gray-400 mt-1">Maks 15 MB</p>
                           <input
                             type="file"
-                            accept=".ppt,.pptx,.pdf,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                            accept=".ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
                             className="hidden"
                             onChange={(e) => {
                               const fil = e.target.files?.[0];
                               if (!fil) return;
-                              const erGyldigType = /\.(ppt|pptx|pdf)$/i.test(fil.name);
+                              const erGyldigType = /\.(ppt|pptx)$/i.test(fil.name);
                               if (!erGyldigType) {
-                                setAdminMelding('Feil: Kun .ppt, .pptx eller .pdf støttes for malopplasting.');
+                                setAdminMelding('Feil: Kun .ppt/.pptx støttes som mal for PowerPoint-generering. PDF kan ikke brukes som template-merge-kilde.');
                                 return;
                               }
                               if (fil.size > 15 * 1024 * 1024) {
@@ -4573,7 +4732,7 @@ export default function PensumPrognoseModell() {
                                   filtype: fil.type || 'application/octet-stream',
                                   filDataUrl: typeof reader.result === 'string' ? reader.result : ''
                                 }));
-                                setAdminMelding('Mal lastet inn lokalt i nettleseren. Trykk "Lagre maloppsett" for å lagre sideoppsett i admin.');
+                                setAdminMelding('Mal lastet inn lokalt i denne økten. Ved generering brukes opplastet fil; hvis den ikke finnes brukes standardmalen fra repo automatisk.');
                               };
                               reader.onerror = () => setAdminMelding('Feil ved lesing av malfil. Prøv på nytt.');
                               reader.readAsDataURL(fil);
@@ -4640,7 +4799,7 @@ export default function PensumPrognoseModell() {
                           }
                           try {
                             await storageSet('pensum_admin_pdf_mal', JSON.stringify(stripTemplateBinaryForStorage(pdfMalConfig)));
-                            setAdminMelding('Malmapping lagret i admin. Selve malfilen lagres kun i denne nettleserøkten (for å unngå lagringskvote-feil).');
+                            setAdminMelding('Malmapping lagret i admin. Om opplastet binærfil mangler i økten brukes standardmalen fra repo automatisk.');
                           } catch (err) {
                             setAdminMelding('Feil ved lagring av maloppsett: ' + err.message);
                           }
@@ -4654,13 +4813,13 @@ export default function PensumPrognoseModell() {
                       <button
                         onClick={() => {
                           setPdfMalConfig({
-                            navn: '',
-                            filnavn: '',
+                            navn: 'Pensum standardmal 2026',
+                            filnavn: DEFAULT_TEMPLATE_FILENAME,
                             filtype: '',
                             filDataUrl: '',
-                            fasteSider: '1-3,10+',
-                            dynamiskeSider: '4-9',
-                            dynamiskBeskrivelse: 'Side 4: Porteføljen i dag\nSide 5: Aksjeandel vs verdensindeks\nSide 6: Verdensindeksen\nSide 7: Pensums porteføljeforslag\nSide 8: Avkastning\nSide 9: Risiko og månedstabeller'
+                            fasteSider: '1-5,14+',
+                            dynamiskeSider: '6-13',
+                            dynamiskBeskrivelse: 'Side 6: Allokering\nSide 7: Beløpsfordeling\nSide 8: Produkter 2026/2025\nSide 9: Produkter 2024/2023/2022\nSide 10: Avkastningsgraf\nSide 11: Risikomål\nSide 12: Månedstabell\nSide 13: Oppsummering'
                           });
                           setAdminMelding('Maloppsett nullstilt lokalt (ikke lagret).');
                         }}
@@ -4671,8 +4830,8 @@ export default function PensumPrognoseModell() {
                     </div>
 
                     <div className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg p-3">
-                      <strong>Status:</strong> Sideoppsettet lagres i admin. Malfilens binærdata holdes kun i aktiv nettleserøkt for å unngå kvote-feil i lokal lagring.
-                      For template-merge må malfil lastes opp i samme økt før generering.
+                      <strong>Status:</strong> Sideoppsettet lagres i admin. Standardmalen <code>{DEFAULT_TEMPLATE_FILENAME}</code> brukes automatisk fra repo i produksjon/lokalt.
+                      Opplasting er valgfri overstyring per økt (nyttig ved testing av alternative maler).
                     </div>
                     <div className="text-xs text-gray-500">
                       Gyldige sideformater: <code>1-3,10+</code>, <code>4-9</code>, <code>2,5,7</code>.
