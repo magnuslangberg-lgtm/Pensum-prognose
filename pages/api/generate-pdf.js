@@ -1,5 +1,19 @@
-import * as PptxModule from 'pptxgenjs';
-import JSZip from 'jszip';
+function loadOptionalModule(name) {
+  try {
+    const req = eval('require');
+    return req(name);
+  } catch (_) {
+    return null;
+  }
+}
+
+function getPptxModule() {
+  return loadOptionalModule('pptxgenjs');
+}
+
+function getJSZipModule() {
+  return loadOptionalModule('jszip');
+}
 
 const COLORS = {
   navy: '0D2240',
@@ -161,6 +175,9 @@ function dynamicSlideText(pageNo, d) {
 
 async function applyTemplatePptx(templateBuffer, payload) {
   const d = normalizeData(payload);
+  const JSZipMod = getJSZipModule();
+  const JSZip = JSZipMod?.default || JSZipMod;
+  if (!JSZip || !JSZip.loadAsync) throw new Error('jszip ikke tilgjengelig i runtime');
   const zip = await JSZip.loadAsync(templateBuffer);
   const fixedSet = parsePageSpec(d?.malConfig?.fasteSider || '1-5,14+', TOTAL_SLIDES);
   const dynamicSet = parsePageSpec(d?.malConfig?.dynamiskeSider || '6-13', TOTAL_SLIDES);
@@ -236,6 +253,9 @@ export default async function handler(req, res) {
     if (templateData && /presentationml|ms-powerpoint/.test(templateData.mime)) {
       try {
         const { buffer, replacements } = await applyTemplatePptx(templateData.buffer, data);
+        if (replacements === 0) {
+          throw new Error('Ingen placeholders funnet i malen (0 erstatninger).');
+        }
         const filnavn = `Pensum_Investeringsforslag_${(data.kundeNavn || 'Kunde').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pptx`;
         res.setHeader('X-Pensum-Output-Format', 'pptx-template');
         res.setHeader('X-Pensum-Template-Applied', `${data?.malConfig?.fasteSider || '1-5,14+'}|${data?.malConfig?.dynamiskeSider || '6-13'}`);
@@ -245,10 +265,12 @@ export default async function handler(req, res) {
         return res.send(buffer);
       } catch (templateErr) {
         console.warn('Template merge feilet, faller tilbake til kodegenerert PPTX:', templateErr.message);
+        res.setHeader('X-Pensum-Template-Warning', encodeURIComponent(templateErr.message));
       }
     }
 
     try {
+      const PptxModule = getPptxModule();
       const PptxGenJS = resolvePptxConstructor(PptxModule);
       if (!PptxGenJS) throw new Error('pptxgenjs ikke tilgjengelig');
       const pptx = buildPptx(PptxGenJS, data);

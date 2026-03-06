@@ -56,6 +56,7 @@ function beregnAllokering(likvid, pe, eiendom, profilNavn) {
   ];
 }
 
+const RAPPORT_DATO = '31.01.2026';
 const HISTORIKK_ARFELT = ['aar2026', 'aar2025', 'aar2024', 'aar2023', 'aar2022'];
 
 function beregnProduktNokkeltall(produkt) {
@@ -90,32 +91,20 @@ function validerSiderFormat(tekst) {
 }
 
 
-// Månedlig YTD-avkastning per rapportmåned.
-// Legg til ny rad her når nye avkastningstall er klare (dato = siste handelsdag i måneden).
-const HISTORIKK_YTD_PER_MAANED = {
-  '2026-01': {
-    dato: '31.01.2026',
-    data: {
-      'global-core-active': -2.0,
-      'global-edge': 0.6,
-      'basis': -0.1,
-      'global-hoyrente': 0.7,
-      'nordisk-hoyrente': 0.6,
-      'norge-a': 2.2,
-      'energy-a': 7.8,
-      'banking-d': -1.1,
-      'financial-d': 0.9
-    }
-  }
-  // Eksempel for neste måned: '2026-02': { dato: '28.02.2026', data: { 'global-core-active': X.X, ... } }
+const RAPPORT_MAANED = '2026-01';
+const HISTORIKK_2026_YTD = {
+  'global-core-active': -2.0,
+  'global-edge': 0.6,
+  'basis': -0.1,
+  'global-hoyrente': 0.7,
+  'nordisk-hoyrente': 0.6,
+  'norge-a': 2.2,
+  'energy-a': 7.8,
+  'banking-d': -1.1,
+  'financial-d': 0.9
 };
 
-const RAPPORT_MAANED = Object.keys(HISTORIKK_YTD_PER_MAANED).sort().at(-1) || '';
-const RAPPORT_DATO = RAPPORT_MAANED ? HISTORIKK_YTD_PER_MAANED[RAPPORT_MAANED].dato : '';
-
 const oppdaterHistorikkTilRapportDato = (historikkMap = {}) => {
-  if (!RAPPORT_MAANED) return historikkMap;
-  const ytdData = HISTORIKK_YTD_PER_MAANED[RAPPORT_MAANED].data;
   const oppdatert = {};
   Object.entries(historikkMap || {}).forEach(([id, historikk]) => {
     const originalData = Array.isArray(historikk?.data) ? historikk.data : [];
@@ -127,7 +116,7 @@ const oppdaterHistorikkTilRapportDato = (historikkMap = {}) => {
     }
 
     const sistePunkt = originalData[originalData.length - 1];
-    const ytd = ytdData[id];
+    const ytd = HISTORIKK_2026_YTD[id];
     const faktor = typeof ytd === 'number' ? (1 + (ytd / 100)) : 1;
     const nyVerdi = parseFloat((sistePunkt.verdi * faktor).toFixed(2));
 
@@ -536,7 +525,7 @@ export default function PensumPrognoseModell() {
   const [adminPassord, setAdminPassord] = useState('');
   const [erAdmin, setErAdmin] = useState(false);
   const [adminMelding, setAdminMelding] = useState('');
-  const ADMIN_PASSORD = process.env.NEXT_PUBLIC_ADMIN_PASSORD || 'pensum2024';
+  const ADMIN_PASSORD = 'pensum2024'; // Enkelt passord - kan endres
 
   const storageGet = async (key) => {
     if (typeof window === 'undefined') return null;
@@ -576,12 +565,11 @@ export default function PensumPrognoseModell() {
     dynamiskBeskrivelse: 'Side 4: Porteføljen i dag\nSide 5: Aksjeandel vs verdensindeks\nSide 6: Verdensindeksen\nSide 7: Pensums porteføljeforslag\nSide 8: Avkastning\nSide 9: Risiko og månedstabeller'
   });
 
-  const MAX_TEMPLATE_PAYLOAD_BYTES = 3.5 * 1024 * 1024;
+  const MAX_TEMPLATE_PAYLOAD_BYTES = 4.0 * 1024 * 1024;
   const stripTemplateBinaryForStorage = (config) => ({
     ...config,
     filDataUrl: ''
   });
-  const malKreverOpplasting = Boolean(pdfMalConfig.filnavn) && !pdfMalConfig.filDataUrl;
   const erGyldigFasteSider = useMemo(() => validerSiderFormat(pdfMalConfig.fasteSider), [pdfMalConfig.fasteSider]);
   const erGyldigDynamiskeSider = useMemo(() => validerSiderFormat(pdfMalConfig.dynamiskeSider), [pdfMalConfig.dynamiskeSider]);
   const erKlarForLagringAvMal = useMemo(() => (
@@ -1594,9 +1582,20 @@ export default function PensumPrognoseModell() {
           dynamiskBeskrivelse: pdfMalConfig.dynamiskBeskrivelse
         }
       };
-      const serializedPayload = JSON.stringify(payload);
+      let payloadTilSending = payload;
+      let templateDroppetPgaStorrelse = false;
+      let serializedPayload = JSON.stringify(payloadTilSending);
       if (serializedPayload.length > MAX_TEMPLATE_PAYLOAD_BYTES) {
-        throw new Error('Malfilen er for stor til å sendes til serverless-funksjonen (Request Entity Too Large). Komprimer malen (bilder), eller last opp en mindre PPTX (helst under 3 MB).');
+        templateDroppetPgaStorrelse = true;
+        payloadTilSending = {
+          ...payload,
+          malConfig: {
+            ...payload.malConfig,
+            filDataUrl: '',
+            filtype: ''
+          }
+        };
+        serializedPayload = JSON.stringify(payloadTilSending);
       }
 
       const res = await fetch('/api/generate-pdf', {
@@ -1616,6 +1615,8 @@ export default function PensumPrognoseModell() {
       }
 
       const outputFormat = res.headers.get('x-pensum-output-format') || '';
+      const templateWarningRaw = res.headers.get('x-pensum-template-warning') || '';
+      const templateWarning = templateWarningRaw ? decodeURIComponent(templateWarningRaw) : '';
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1633,6 +1634,10 @@ export default function PensumPrognoseModell() {
 
       if (outputFormat === 'pdf-fallback') {
         alert('PowerPoint er midlertidig utilgjengelig i miljøet. Du fikk PDF som fallback.');
+      } else if (templateDroppetPgaStorrelse) {
+        alert('Malfilen var for stor for serverless-request. Presentasjonen ble generert uten template-merge. Komprimer malen (bilder) for å bruke full mal.');
+      } else if (outputFormat === 'pptx-generated' && templateWarning) {
+        alert('Template-merge ble hoppet over: ' + templateWarning + ' Presentasjonen ble laget med standardgeneratoren.');
       }
 
       setPdfModal(false);
@@ -4451,12 +4456,6 @@ export default function PensumPrognoseModell() {
                       </button>
                     </div>
 
-                    {malKreverOpplasting && (
-                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
-                        <strong>Malfil mangler:</strong> «{pdfMalConfig.filnavn}» er konfigurert, men binærdataen er ikke tilgjengelig i denne nettleserøkten.
-                        Last opp filen på nytt over for å bruke template-merge ved generering.
-                      </div>
-                    )}
                     <div className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg p-3">
                       <strong>Status:</strong> Sideoppsettet lagres i admin. Malfilens binærdata holdes kun i aktiv nettleserøkt for å unngå kvote-feil i lokal lagring.
                       For template-merge må malfil lastes opp i samme økt før generering.
