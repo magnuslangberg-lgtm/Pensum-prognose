@@ -676,6 +676,9 @@ export default function PensumPrognoseModell() {
     erGyldigFasteSider &&
     erGyldigDynamiskeSider
   ), [pdfMalConfig, erGyldigFasteSider, erGyldigDynamiskeSider]);
+  const malKreverOpplasting = useMemo(() => (
+    Boolean(pdfMalConfig.filnavn) && !pdfMalConfig.filDataUrl
+  ), [pdfMalConfig.filnavn, pdfMalConfig.filDataUrl]);
   
   // Standard avkastningsrater (kan endres av admin)
   const [avkastningsrater, setAvkastningsrater] = useState({
