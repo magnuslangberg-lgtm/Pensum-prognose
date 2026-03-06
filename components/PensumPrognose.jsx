@@ -146,6 +146,40 @@ const inferPerioderPerAarFraHistorikk = (sortertData = []) => {
   return 12; // månedlige datapunkt
 };
 
+const beregnManedligeAvkastningerFraHistorikk = (data = []) => {
+  if (!Array.isArray(data) || data.length < 2) return [];
+  const sortert = [...data]
+    .filter((punkt) => parseHistorikkDato(punkt?.dato) && erGyldigTall(punkt?.verdi))
+    .sort((a, b) => parseHistorikkDato(a.dato) - parseHistorikkDato(b.dato));
+  if (sortert.length < 2) return [];
+
+  const monthMap = new Map();
+  sortert.forEach((punkt) => {
+    const d = parseHistorikkDato(punkt.dato);
+    if (!d) return;
+    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const existing = monthMap.get(key);
+    if (!existing) {
+      monthMap.set(key, { key, first: punkt.verdi, last: punkt.verdi, lastDate: d });
+    } else {
+      if (d >= existing.lastDate) {
+        existing.last = punkt.verdi;
+        existing.lastDate = d;
+      }
+    }
+  });
+
+  const months = Array.from(monthMap.values()).sort((a, b) => a.key.localeCompare(b.key));
+  const returns = [];
+  for (let i = 1; i < months.length; i += 1) {
+    const prevClose = months[i - 1].last;
+    const close = months[i].last;
+    if (!erGyldigTall(prevClose) || prevClose === 0 || !erGyldigTall(close)) continue;
+    returns.push({ dato: months[i].key, avkastning: (close - prevClose) / prevClose, verdi: close });
+  }
+  return returns;
+};
+
 const finnStartVerdiVedPeriode = (data = [], startDato) => {
   if (!Array.isArray(data) || data.length === 0) return 100;
   const sortert = [...data]
@@ -163,6 +197,17 @@ const finnStartVerdiVedPeriode = (data = [], startDato) => {
   });
   return (sisteFoerEllerLik || forsteEtter || sortert[0]).verdi || 100;
 };
+const PRODUKT_ESTIMAT_INFO = {
+  'financial-d': 'Pensum Financial Opportunities hadde oppstart 05.04.2025. Utvikling før dette er estimert med Bloomberg Global High Yield, valutasikret til NOK.',
+  'banking-d': 'Pensum Nordic Banking Sector hadde oppstart 29.01.2025. Utvikling før dette er estimert med det lignende mandatet Pensum Sparebank+.',
+  'norge-a': 'Pensum Norge A hadde oppstart 27.11.2023. Utvikling før dette er estimert med lignende porteføljer (1/3 Norske Aksjer Vekst, 2/3 Norske Aksjer Utbytte).',
+  'nordisk-hoyrente': 'Pensum Nordisk Høyrente hadde oppstart februar 2024. Utvikling før dette er estimert med underliggende fonds utvikling.',
+  'global-core-active': 'Pensum Global Core Active hadde oppstart 01.01.2026. Historikk før dette er estimert med samme allokering som oppstartsporteføljen.',
+  'global-edge': 'Pensum Global Edge hadde oppstart 01.01.2026. Historikk før dette er estimert med samme allokering som oppstartsporteføljen.',
+  'energy-a': 'Pensum Global Energy: avkastning før oppstart i desember 2022 er estimert med et lignende diskresjonært mandat.',
+  basis: 'Pensum Basis: avkastning før oppstart 12.09.2023 er estimert med en lignende portefølje (50 % renter / 50 % aksjer).'
+};
+
 const HISTORIKK_2026_YTD = {
   'global-core-active': -2.0,
   'global-edge': 0.6,
@@ -3282,10 +3327,16 @@ export default function PensumPrognoseModell() {
                     )}
                     
                     {/* Disclaimer */}
-                    <div className="mt-4 text-xs text-gray-500 p-3 bg-gray-50 rounded-lg">
-                      <strong>Viktig informasjon om avkastning:</strong> Historikk er indeksert til 100 ved start av valgt periode. 
-                      Historikk er oppdatert til og med {RAPPORT_DATO} (2026 vises som YTD). For flere produkter er historikk før oppstart estimert - se produktdetaljer for mer informasjon. 
-                      Historisk avkastning er ingen garanti for fremtidig avkastning.
+                    <div className="mt-4 text-xs text-gray-600 p-3 bg-gray-50 rounded-lg space-y-2">
+                      <p><strong>Viktig informasjon om avkastning:</strong> Historikk er indeksert til 100 ved start av valgt periode og oppdatert til og med {RAPPORT_DATO} (2026 vises som YTD). Avkastning i dashboard/nøkkeltall beregnes på månedsbasis fra kurs per dato.</p>
+                      <ul className="list-disc ml-4 space-y-1">
+                        {Object.entries(PRODUKT_ESTIMAT_INFO).map(([id, tekst]) => {
+                          const finnesIUnivers = [...pensumProdukter.enkeltfond, ...pensumProdukter.fondsportefoljer].some((p) => p.id === id);
+                          if (!finnesIUnivers) return null;
+                          return <li key={id}>{tekst}</li>;
+                        })}
+                      </ul>
+                      <p>Historisk avkastning er ingen garanti for fremtidig avkastning.</p>
                     </div>
                   </div>
                 </div>
@@ -3799,29 +3850,32 @@ export default function PensumPrognoseModell() {
               })
               .sort((a, b) => parseHistorikkDato(a.dato) - parseHistorikkDato(b.dato));
             if (filtrert.length < 3) return null;
-            const avkastninger = [];
-            for (let i = 1; i < filtrert.length; i++) {
-              const prev = filtrert[i - 1].verdi;
-              const curr = filtrert[i].verdi;
-              if (erGyldigTall(prev) && prev !== 0 && erGyldigTall(curr)) {
-                avkastninger.push((curr - prev) / prev);
-              }
-            }
+
+            const manedlige = beregnManedligeAvkastningerFraHistorikk(filtrert);
+            if (manedlige.length < 2) return null;
+
+            const avkastninger = manedlige.map((m) => m.avkastning);
             const n = avkastninger.length;
             if (n === 0) return null;
             const perioderPerAar = inferPerioderPerAarFraHistorikk(filtrert);
             const gjennomsnitt = avkastninger.reduce((s, v) => s + v, 0) / n;
-            const aarligAvkastning = ((filtrert[filtrert.length-1].verdi / filtrert[0].verdi) ** (perioderPerAar / n) - 1) * 100;
+            const perioderPerAar = 12;
+            const startVerdi = filtrert[0].verdi;
+            const sluttVerdi = filtrert[filtrert.length - 1].verdi;
+            const aarligAvkastning = startVerdi > 0 ? ((sluttVerdi / startVerdi) ** (perioderPerAar / n) - 1) * 100 : 0;
             const varians = avkastninger.reduce((s, v) => s + (v - gjennomsnitt) ** 2, 0) / n;
             const stdAvvik = Math.sqrt(varians) * Math.sqrt(perioderPerAar) * 100;
-            let maxDD = 0, peak = filtrert[0].verdi;
+
+            let maxDD = 0;
+            let peak = startVerdi;
             const drawdownSerie = filtrert.map(d => {
               if (d.verdi > peak) peak = d.verdi;
               const dd = peak > 0 ? (d.verdi - peak) / peak * 100 : 0;
               if (dd < maxDD) maxDD = dd;
               return { dato: d.dato, dd: parseFloat(dd.toFixed(2)) };
             });
-            const totalAvk = ((filtrert[filtrert.length-1].verdi / filtrert[0].verdi) - 1) * 100;
+
+            const totalAvk = startVerdi > 0 ? ((sluttVerdi / startVerdi) - 1) * 100 : 0;
             const sharpe = stdAvvik > 0 ? (aarligAvkastning - 3) / stdAvvik : 0;
             return { id, aarligAvkastning: parseFloat(aarligAvkastning.toFixed(2)), totalAvkastning: parseFloat(totalAvk.toFixed(2)), standardavvik: parseFloat(stdAvvik.toFixed(1)), maxDrawdown: parseFloat(maxDD.toFixed(1)), sharpe: parseFloat(sharpe.toFixed(2)), drawdownSerie };
           };
