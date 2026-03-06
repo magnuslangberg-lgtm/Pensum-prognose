@@ -56,7 +56,7 @@ function beregnAllokering(likvid, pe, eiendom, profilNavn) {
   ];
 }
 
-const RAPPORT_DATO = '31.01.2026';
+const RAPPORT_DATO = '28.02.2026';
 const HISTORIKK_ARFELT = ['aar2026', 'aar2025', 'aar2024', 'aar2023', 'aar2022'];
 
 function beregnProduktNokkeltall(produkt) {
@@ -91,7 +91,7 @@ function validerSiderFormat(tekst) {
 }
 
 
-const RAPPORT_MAANED = '2026-01';
+const RAPPORT_MAANED = '2026-02';
 const HISTORIKK_2026_YTD = {
   'global-core-active': -2.0,
   'global-edge': 0.6,
@@ -4068,7 +4068,7 @@ export default function PensumPrognoseModell() {
                   </div>
                   <div className="p-6">
                     <p className="text-sm text-gray-600 mb-4">
-                      Last opp en Excel-fil (.xlsx) med oppdatert avkastningsdata for Pensum-produktene.
+                      Last opp en Excel- eller CSV-fil (.xlsx/.xls/.csv) med oppdatert avkastningsdata for Pensum-produktene.
                     </p>
                     <div className="bg-blue-50 rounded-lg p-4 mb-4">
                       <p className="text-sm font-medium text-blue-800 mb-2">Forventet format:</p>
@@ -4086,10 +4086,10 @@ export default function PensumPrognoseModell() {
                       <label className="flex-1">
                         <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
                           <svg className="w-8 h-8 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                          <p className="text-sm text-gray-600">Klikk for å velge Excel-fil</p>
-                          <p className="text-xs text-gray-400 mt-1">.xlsx format</p>
+                          <p className="text-sm text-gray-600">Klikk for å velge Excel/CSV-fil</p>
+                          <p className="text-xs text-gray-400 mt-1">.xlsx / .xls / .csv</p>
                         </div>
-                        <input type="file" accept=".xlsx,.xls" className="hidden" onChange={async (e) => {
+                        <input type="file" accept=".xlsx,.xls,.csv,text/csv" className="hidden" onChange={async (e) => {
                           const file = e.target.files[0];
                           if (!file) return;
                           try {
@@ -4116,7 +4116,7 @@ export default function PensumPrognoseModell() {
 
                             const col = {
                               id: finnKolonne(['id', 'produkt-id', 'produkt_id'], 0),
-                              aar2026: finnKolonne(['2026', '2026 ytd', 'aar2026'], 1),
+                              aar2026: finnKolonne(['2026', '2026 ytd', '2026 (ytd)', 'feb 2026', '28.02.2026', 'aar2026'], 1),
                               aar2025: finnKolonne(['2025', 'aar2025'], 2),
                               aar2024: finnKolonne(['2024', 'aar2024'], 3),
                               aar2023: finnKolonne(['2023', 'aar2023'], 4),
@@ -4160,10 +4160,10 @@ export default function PensumPrognoseModell() {
                             // Lagre til storage
                             await storageSet('pensum_admin_produkter', JSON.stringify(oppdaterteProdukter));
                             
-                            setAdminMelding('Oppdaterte ' + oppdatert + ' produkter fra Excel-filen.');
+                            setAdminMelding('Oppdaterte ' + oppdatert + ' produkter fra importfilen (Excel/CSV).');
                           } catch (err) {
                             console.error(err);
-                            setAdminMelding('Feil ved lesing av Excel-fil: ' + err.message);
+                            setAdminMelding('Feil ved lesing av importfil (Excel/CSV): ' + err.message);
                           }
                           e.target.value = '';
                         }} />
