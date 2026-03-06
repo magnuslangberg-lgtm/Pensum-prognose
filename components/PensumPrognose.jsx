@@ -907,6 +907,21 @@ export default function PensumPrognoseModell() {
     });
   };
 
+  const [pensumDragVekter, setPensumDragVekter] = useState({});
+  const startPensumDrag = (id, value) => {
+    setPensumDragVekter((prev) => ({ ...prev, [id]: value }));
+  };
+  const commitPensumDrag = (id) => {
+    const nyVekt = pensumDragVekter[id];
+    if (!erGyldigTall(nyVekt)) return;
+    oppdaterPensumVekt(id, Number(nyVekt));
+    setPensumDragVekter((prev) => {
+      const neste = { ...prev };
+      delete neste[id];
+      return neste;
+    });
+  };
+
   const normaliserPensumTil100 = useCallback(() => {
     setPensumAllokering((prev) => skalerVekterTilHundreListe(prev));
   }, []);
@@ -941,27 +956,56 @@ export default function PensumPrognoseModell() {
   const beregnPensumHistorikk = useMemo(() => {
     const alleProdukt = [...pensumProdukter.enkeltfond, ...pensumProdukter.fondsportefoljer, ...pensumProdukter.alternative];
     const aarKolonner = HISTORIKK_ARFELT;
+    const aarMapping = { aar2026: 2026, aar2025: 2025, aar2024: 2024, aar2023: 2023, aar2022: 2022 };
     const resultat = {};
-    
-    aarKolonner.forEach(aar => {
+
+    const beregnFraHistorikk = (produktId, aar) => {
+      const hist = produktHistorikk?.[produktId];
+      const data = Array.isArray(hist?.data) ? hist.data : [];
+      const sortert = data
+        .filter((punkt) => erGyldigTall(punkt?.verdi) && parseHistorikkDato(punkt?.dato))
+        .sort((a, b) => parseHistorikkDato(a.dato) - parseHistorikkDato(b.dato));
+      if (sortert.length < 2) return null;
+
+      const startDato = new Date(aar, 0, 1);
+      const sluttDato = aar === 2026 ? RAPPORT_DATO_OBJEKT : new Date(aar, 11, 31);
+
+      const startKandidat = sortert.filter((punkt) => parseHistorikkDato(punkt.dato) <= startDato).slice(-1)[0]
+        || sortert.find((punkt) => parseHistorikkDato(punkt.dato) >= startDato);
+      const sluttKandidat = sortert.filter((punkt) => {
+        const dato = parseHistorikkDato(punkt.dato);
+        return dato && dato >= startDato && dato <= sluttDato;
+      }).slice(-1)[0];
+
+      if (!startKandidat || !sluttKandidat || startKandidat === sluttKandidat || !erGyldigTall(startKandidat.verdi) || startKandidat.verdi === 0) return null;
+      return ((sluttKandidat.verdi / startKandidat.verdi) - 1) * 100;
+    };
+
+    aarKolonner.forEach((aarFelt) => {
       let vektetSum = 0;
       let totalVekt = 0;
-      pensumAllokering.forEach(allok => {
-        const produkt = alleProdukt.find(p => p.id === allok.id);
-        if (produkt && allok.vekt > 0) {
-          // For alternative investeringer, bruk forventet avkastning
-          const avkastning = produkt[aar] !== null ? produkt[aar] : (produkt.forventetAvkastning || null);
-          if (avkastning !== null) {
-            vektetSum += avkastning * allok.vekt;
-            totalVekt += allok.vekt;
-          }
+      pensumAllokering.forEach((allok) => {
+        const produkt = alleProdukt.find((p) => p.id === allok.id);
+        if (!produkt || allok.vekt <= 0) return;
+
+        let avkastning = erGyldigTall(produkt?.[aarFelt]) ? Number(produkt[aarFelt]) : null;
+        if (!erGyldigTall(avkastning)) {
+          avkastning = beregnFraHistorikk(produkt.id, aarMapping[aarFelt]);
+        }
+        if (!erGyldigTall(avkastning) && erGyldigTall(produkt?.forventetAvkastning)) {
+          avkastning = Number(produkt.forventetAvkastning);
+        }
+
+        if (erGyldigTall(avkastning)) {
+          vektetSum += avkastning * allok.vekt;
+          totalVekt += allok.vekt;
         }
       });
-      resultat[aar] = totalVekt > 0 ? vektetSum / totalVekt : null;
+      resultat[aarFelt] = totalVekt > 0 ? vektetSum / totalVekt : null;
     });
-    
+
     return resultat;
-  }, [pensumAllokering, pensumProdukter]);
+  }, [pensumAllokering, pensumProdukter, produktHistorikk]);
 
   // Beregn aktivafordeling (aksjer vs renter vs alternativer)
   const pensumAktivafordeling = useMemo(() => {
@@ -1859,25 +1903,45 @@ export default function PensumPrognoseModell() {
         serializedPayload = JSON.stringify(payloadTilSending);
       }
 
-      const res = await fetch('/api/generate-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: serializedPayload,
-      });
-      if (!res.ok) {
-        let melding = await res.text();
-        try {
-          const parsed = JSON.parse(melding);
-          if (parsed?.error) melding = parsed.error;
-        } catch (_) {
-          // behold rå melding
+      const fetchPresentation = async (requestPayload) => {
+        const response = await fetch('/api/generate-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestPayload),
+        });
+        if (!response.ok) {
+          let melding = await response.text();
+          try {
+            const parsed = JSON.parse(melding);
+            if (parsed?.error) melding = parsed.error;
+          } catch (_) {
+            // behold rå melding
+          }
+          throw new Error(melding || 'Ukjent feil fra server.');
         }
-        throw new Error(melding || 'Ukjent feil fra server.');
-      }
+        return response;
+      };
 
-      const outputFormat = res.headers.get('x-pensum-output-format') || '';
+      let res = await fetchPresentation(payloadTilSending);
+      let outputFormat = res.headers.get('x-pensum-output-format') || '';
       const templateWarningRaw = res.headers.get('x-pensum-template-warning') || '';
       const templateWarning = templateWarningRaw ? decodeURIComponent(templateWarningRaw) : '';
+      const templateReplacements = Number(res.headers.get('x-pensum-template-replacements') || 0);
+      const manglerPlaceholders = outputFormat === 'pptx-template' && templateReplacements === 0;
+
+      if (manglerPlaceholders) {
+        res = await fetchPresentation({
+          ...payloadTilSending,
+          skipTemplateMerge: true,
+          malConfig: {
+            ...payloadTilSending.malConfig,
+            filDataUrl: '',
+            filtype: ''
+          }
+        });
+        outputFormat = res.headers.get('x-pensum-output-format') || outputFormat;
+      }
+
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1897,6 +1961,8 @@ export default function PensumPrognoseModell() {
         alert('PowerPoint er midlertidig utilgjengelig i miljøet. Du fikk PDF som fallback.');
       } else if (templateDroppetPgaStorrelse) {
         alert('Malfilen var for stor for serverless-request. Presentasjonen ble generert uten template-merge. Komprimer malen (bilder) for å bruke full mal.');
+      } else if (manglerPlaceholders) {
+        alert('Malen inneholdt ingen gjenkjennbare placeholders for dynamiske felter. Derfor ble presentasjonen automatisk generert med datadrevne sider (6–13) fra verktøyet.');
       } else if (outputFormat === 'pptx-generated' && templateWarning) {
         alert('Template-merge ble hoppet over: ' + templateWarning + ' Presentasjonen ble laget med standardgeneratoren.');
       }
@@ -1963,8 +2029,15 @@ export default function PensumPrognoseModell() {
   const AllokeringRow = ({ item, index, isSubItem }) => {
     const [localVekt, setLocalVekt] = useState(item.vekt.toString());
     const [localBelop, setLocalBelop] = useState(formatNumber((item.vekt / 100) * effektivtInvestertBelop));
-    useEffect(() => { setLocalVekt(item.vekt.toFixed(1)); setLocalBelop(formatNumber((item.vekt / 100) * effektivtInvestertBelop)); }, [item.vekt, effektivtInvestertBelop]);
-    
+    const [dragVekt, setDragVekt] = useState(item.vekt);
+    useEffect(() => {
+      setLocalVekt(item.vekt.toFixed(1));
+      setLocalBelop(formatNumber((item.vekt / 100) * effektivtInvestertBelop));
+      setDragVekt(item.vekt);
+    }, [item.vekt, effektivtInvestertBelop]);
+
+    const commitDragVekt = () => updateAllokeringVekt(index, Number(dragVekt) || 0);
+
     return (
       <tr className={"border-b border-gray-100 hover:bg-gray-50 " + (isSubItem ? "bg-gray-50" : "")}>
         <td className={"py-3 pr-4 " + (isSubItem ? "pl-10" : "pl-4")}>
@@ -1977,11 +2050,21 @@ export default function PensumPrognoseModell() {
           <div className="space-y-1">
             <div className="flex items-center justify-center gap-1.5">
               <button onClick={() => updateAllokeringVekt(index, (item.vekt || 0) - 0.5)} className="w-6 h-6 rounded border border-gray-200 text-gray-600 hover:bg-gray-100">−</button>
-              <input type="text" value={localVekt} onChange={(e) => setLocalVekt(e.target.value)} onBlur={() => updateAllokeringVekt(index, parseFloat(localVekt) || 0)} className="w-16 text-center text-sm border border-gray-200 rounded py-1.5 px-2" />
+              <input type="text" value={localVekt} onChange={(e) => setLocalVekt(e.target.value)} onBlur={() => { const v = parseFloat(localVekt) || 0; setDragVekt(v); updateAllokeringVekt(index, v); }} className="w-16 text-center text-sm border border-gray-200 rounded py-1.5 px-2" />
               <span className="text-gray-400 text-xs">%</span>
               <button onClick={() => updateAllokeringVekt(index, (item.vekt || 0) + 0.5)} className="w-6 h-6 rounded border border-gray-200 text-gray-600 hover:bg-gray-100">+</button>
             </div>
-            <input type="range" min="0" max="100" step="0.5" value={item.vekt} onChange={(e) => updateAllokeringVekt(index, parseFloat(e.target.value) || 0)} className="w-full accent-blue-700" />
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="0.5"
+              value={dragVekt}
+              onChange={(e) => setDragVekt(parseFloat(e.target.value) || 0)}
+              onMouseUp={commitDragVekt}
+              onTouchEnd={commitDragVekt}
+              className="w-full accent-blue-700"
+            />
           </div>
         </td>
         <td className="py-3 px-2">
@@ -3073,8 +3156,27 @@ export default function PensumPrognoseModell() {
                             </div>
                             <div className="flex items-center gap-2">
                               <button onClick={() => oppdaterPensumVekt(produkt.id, (produkt.vekt || 0) - 0.5)} className="w-6 h-6 rounded border border-gray-200 text-gray-600 hover:bg-gray-100">−</button>
-                              <input type="range" min="0" max="100" step="0.5" value={produkt.vekt} onChange={(e) => oppdaterPensumVekt(produkt.id, parseFloat(e.target.value) || 0)} className="w-28 accent-blue-700" />
-                              <input type="number" min="0" max="100" step="0.5" value={produkt.vekt} onChange={(e) => oppdaterPensumVekt(produkt.id, parseFloat(e.target.value) || 0)} className="w-16 border border-gray-200 rounded py-1 px-2 text-sm text-right" />
+                              <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                step="0.5"
+                                value={pensumDragVekter[produkt.id] ?? produkt.vekt}
+                                onChange={(e) => startPensumDrag(produkt.id, parseFloat(e.target.value) || 0)}
+                                onMouseUp={() => commitPensumDrag(produkt.id)}
+                                onTouchEnd={() => commitPensumDrag(produkt.id)}
+                                className="w-36 accent-blue-700"
+                              />
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.5"
+                                value={pensumDragVekter[produkt.id] ?? produkt.vekt}
+                                onChange={(e) => startPensumDrag(produkt.id, parseFloat(e.target.value) || 0)}
+                                onBlur={() => commitPensumDrag(produkt.id)}
+                                className="w-20 border border-gray-200 rounded py-1 px-2 text-sm text-right"
+                              />
                               <span className="text-sm text-gray-500">%</span>
                               <button onClick={() => oppdaterPensumVekt(produkt.id, (produkt.vekt || 0) + 0.5)} className="w-6 h-6 rounded border border-gray-200 text-gray-600 hover:bg-gray-100">+</button>
                             </div>
@@ -3184,14 +3286,14 @@ export default function PensumPrognoseModell() {
                     <div className="pt-4 border-t border-gray-200">
                       <h4 className="font-semibold mb-2" style={{ color: PENSUM_COLORS.darkBlue }}>Aggregert eksponering (valgte produkter)</h4>
                       <p className="text-xs text-gray-500 mb-3">Vektet snitt av underliggende eksponeringsdata fra Pensum-produktene.</p>
-                      <div className="space-y-4">
+                      <div className="space-y-4 rounded-xl border border-gray-100 bg-gradient-to-br from-white to-slate-50 p-4">
                         <div>
                           <p className="text-xs font-semibold text-gray-600 mb-1">Sektorer (top 8)</p>
-                          <ResponsiveContainer width="100%" height={170}>
+                          <ResponsiveContainer width="100%" height={190}>
                             <BarChart data={aggregertPensumEksponering.sektorer} layout="vertical" margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
                               <XAxis type="number" tick={{ fontSize: 10 }} />
-                              <YAxis type="category" dataKey="navn" width={95} tick={{ fontSize: 10 }} />
+                              <YAxis type="category" dataKey="navn" width={110} tick={{ fontSize: 10 }} />
                               <Tooltip formatter={(v) => [v + '%', 'Vekt']} />
                               <Bar dataKey="vekt" fill={PENSUM_COLORS.lightBlue} radius={[0, 4, 4, 0]} />
                             </BarChart>
@@ -3199,11 +3301,11 @@ export default function PensumPrognoseModell() {
                         </div>
                         <div>
                           <p className="text-xs font-semibold text-gray-600 mb-1">Regioner (top 8)</p>
-                          <ResponsiveContainer width="100%" height={170}>
+                          <ResponsiveContainer width="100%" height={190}>
                             <BarChart data={aggregertPensumEksponering.regioner} layout="vertical" margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
                               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
                               <XAxis type="number" tick={{ fontSize: 10 }} />
-                              <YAxis type="category" dataKey="navn" width={95} tick={{ fontSize: 10 }} />
+                              <YAxis type="category" dataKey="navn" width={110} tick={{ fontSize: 10 }} />
                               <Tooltip formatter={(v) => [v + '%', 'Vekt']} />
                               <Bar dataKey="vekt" fill={PENSUM_COLORS.teal} radius={[0, 4, 4, 0]} />
                             </BarChart>

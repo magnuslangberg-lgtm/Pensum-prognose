@@ -392,8 +392,9 @@ export default async function handler(req, res) {
 
   try {
     const data = req.body || {};
-    const uploadedTemplateData = parseDataUrlToBuffer(data?.malConfig?.filDataUrl || '');
-    const repoTemplateData = uploadedTemplateData ? null : pickTemplateFromRepo(data?.malConfig?.filnavn || '');
+    const skipTemplateMerge = Boolean(data?.skipTemplateMerge);
+    const uploadedTemplateData = skipTemplateMerge ? null : parseDataUrlToBuffer(data?.malConfig?.filDataUrl || '');
+    const repoTemplateData = skipTemplateMerge || uploadedTemplateData ? null : pickTemplateFromRepo(data?.malConfig?.filnavn || '');
     const templateData = uploadedTemplateData || repoTemplateData;
 
     if (templateData && /presentationml|ms-powerpoint/.test(templateData.mime)) {
@@ -422,7 +423,7 @@ export default async function handler(req, res) {
       const buffer = await pptx.write({ outputType: 'nodebuffer' });
       const filnavn = `Pensum_Investeringsforslag_${(data.kundeNavn || 'Kunde').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pptx`;
       res.setHeader('X-Pensum-Output-Format', 'pptx-generated');
-      res.setHeader('X-Pensum-Template-Applied', 'no-template-merge');
+      res.setHeader('X-Pensum-Template-Applied', skipTemplateMerge ? 'skip-template-merge' : 'no-template-merge');
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
       res.setHeader('Content-Disposition', `attachment; filename="${filnavn}"`);
       return res.send(buffer);
