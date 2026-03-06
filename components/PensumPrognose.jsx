@@ -1690,6 +1690,32 @@ export default function PensumPrognoseModell() {
   const handleGeneratePresentation = async () => {
     setPdfLoading(true);
     try {
+      const valgteProduktIrapport = pdfProduktValg.length > 0 ? pdfProduktValg : Object.keys(PRODUKT_NAVN_MAP_PDF);
+      const historikkTilEksport = valgteProduktIrapport.reduce((acc, id) => {
+        const hist = produktHistorikk?.[id];
+        if (!hist || !Array.isArray(hist.data)) return acc;
+        acc[id] = {
+          ...hist,
+          data: hist.data.slice(-120)
+        };
+        return acc;
+      }, {});
+
+      const produktMap = [...(pensumProdukter?.enkeltfond || []), ...(pensumProdukter?.fondsportefoljer || [])]
+        .reduce((acc, p) => { if (p?.id) acc[p.id] = p; return acc; }, {});
+      const pensumProdukterTilEksport = valgteProduktIrapport
+        .map((id) => produktMap[id])
+        .filter(Boolean)
+        .map((p) => ({
+          id: p.id,
+          navn: p.navn,
+          aar2026: p.aar2026,
+          aar2025: p.aar2025,
+          aar2024: p.aar2024,
+          aar2023: p.aar2023,
+          aar2022: p.aar2022
+        }));
+
       const payload = {
         kundeNavn: kundeNavn || 'Investor',
         totalKapital,
@@ -1697,9 +1723,9 @@ export default function PensumPrognoseModell() {
         horisont,
         vektetAvkastning,
         allokering: aktiveAktiva,
-        produkterIBruk: pdfProduktValg.length > 0 ? pdfProduktValg : Object.keys(PRODUKT_NAVN_MAP_PDF),
-        pensumProdukter,
-        produktHistorikk,
+        produkterIBruk: valgteProduktIrapport,
+        pensumProdukter: pensumProdukterTilEksport,
+        produktHistorikk: historikkTilEksport,
         malConfig: {
           navn: pdfMalConfig.navn,
           filnavn: pdfMalConfig.filnavn,
