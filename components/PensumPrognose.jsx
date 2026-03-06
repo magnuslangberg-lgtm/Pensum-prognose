@@ -92,21 +92,76 @@ function validerSiderFormat(tekst) {
 
 
 const RAPPORT_MAANED = '2026-02';
+const RAPPORT_DATO_ISO = '2026-02-28';
 const RAPPORT_DATO_OBJEKT = (() => {
   const [d, m, y] = RAPPORT_DATO.split('.').map(Number);
   return new Date(y, m - 1, d);
 })();
 
+const parseHistorikkDato = (datoStr) => {
+  if (!datoStr || typeof datoStr !== 'string') return null;
+  const trimmed = datoStr.trim();
+  const daily = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (daily) {
+    const [, y, m, d] = daily;
+    return new Date(Number(y), Number(m) - 1, Number(d));
+  }
+  const monthly = trimmed.match(/^(\d{4})-(\d{2})$/);
+  if (monthly) {
+    const [, y, m] = monthly;
+    return new Date(Number(y), Number(m) - 1, 1);
+  }
+  const parsed = new Date(trimmed);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const formatHistorikkEtikett = (datoStr) => {
+  const dato = parseHistorikkDato(datoStr);
+  if (!dato) return datoStr;
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Des'];
+  const month = monthNames[dato.getMonth()];
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(datoStr).trim())) {
+    return `${String(dato.getDate()).padStart(2, '0')}. ${month} ${dato.getFullYear()}`;
+  }
+  return `${month} ${dato.getFullYear()}`;
+};
+
+const inferPerioderPerAarFraHistorikk = (sortertData = []) => {
+  if (!Array.isArray(sortertData) || sortertData.length < 3) return 12;
+  const datoer = sortertData
+    .map((punkt) => parseHistorikkDato(punkt?.dato))
+    .filter(Boolean)
+    .sort((a, b) => a - b);
+  if (datoer.length < 3) return 12;
+
+  const diffs = [];
+  for (let i = 1; i < datoer.length; i += 1) {
+    const diffDager = (datoer[i] - datoer[i - 1]) / (1000 * 60 * 60 * 24);
+    if (diffDager > 0) diffs.push(diffDager);
+  }
+  if (diffs.length === 0) return 12;
+  const gjennomsnittDiff = diffs.reduce((sum, d) => sum + d, 0) / diffs.length;
+  if (gjennomsnittDiff <= 2.5) return 252; // daglige datapunkt
+  if (gjennomsnittDiff <= 10) return 52; // ukentlige datapunkt
+  return 12; // månedlige datapunkt
+};
+
 const finnStartVerdiVedPeriode = (data = [], startDato) => {
   if (!Array.isArray(data) || data.length === 0) return 100;
+  const sortert = [...data]
+    .filter((punkt) => parseHistorikkDato(punkt?.dato) && erGyldigTall(punkt?.verdi))
+    .sort((a, b) => parseHistorikkDato(a.dato) - parseHistorikkDato(b.dato));
+  if (sortert.length === 0) return 100;
+
   let sisteFoerEllerLik = null;
   let forsteEtter = null;
-  data.forEach((punkt) => {
-    const dato = new Date(punkt.dato + '-01');
+  sortert.forEach((punkt) => {
+    const dato = parseHistorikkDato(punkt.dato);
+    if (!dato) return;
     if (dato <= startDato) sisteFoerEllerLik = punkt;
     if (!forsteEtter && dato >= startDato) forsteEtter = punkt;
   });
-  return (sisteFoerEllerLik || forsteEtter || data[0]).verdi || 100;
+  return (sisteFoerEllerLik || forsteEtter || sortert[0]).verdi || 100;
 };
 const HISTORIKK_2026_YTD = {
   'global-core-active': -2.0,
@@ -124,21 +179,28 @@ const oppdaterHistorikkTilRapportDato = (historikkMap = {}) => {
   const oppdatert = {};
   Object.entries(historikkMap || {}).forEach(([id, historikk]) => {
     const originalData = Array.isArray(historikk?.data) ? historikk.data : [];
-    const harRapportMaaned = originalData.some((punkt) => punkt.dato === RAPPORT_MAANED);
+    const harRapportMaaned = originalData.some((punkt) => String(punkt?.dato || '').startsWith(RAPPORT_MAANED));
 
     if (harRapportMaaned || originalData.length === 0) {
       oppdatert[id] = historikk;
       return;
     }
 
-    const sistePunkt = originalData[originalData.length - 1];
+    const sortert = [...originalData]
+      .filter((punkt) => parseHistorikkDato(punkt?.dato) && erGyldigTall(punkt?.verdi))
+      .sort((a, b) => parseHistorikkDato(a.dato) - parseHistorikkDato(b.dato));
+    const sistePunkt = sortert[sortert.length - 1];
+    if (!sistePunkt) {
+      oppdatert[id] = historikk;
+      return;
+    }
     const ytd = HISTORIKK_2026_YTD[id];
     const faktor = typeof ytd === 'number' ? (1 + (ytd / 100)) : 1;
     const nyVerdi = parseFloat((sistePunkt.verdi * faktor).toFixed(2));
 
     oppdatert[id] = {
       ...historikk,
-      data: [...originalData, { dato: RAPPORT_MAANED, verdi: nyVerdi }]
+      data: [...sortert, { dato: RAPPORT_DATO_ISO, verdi: nyVerdi }]
     };
   });
 
@@ -1588,6 +1650,8 @@ export default function PensumPrognoseModell() {
         vektetAvkastning,
         allokering: aktiveAktiva,
         produkterIBruk: pdfProduktValg.length > 0 ? pdfProduktValg : Object.keys(PRODUKT_NAVN_MAP_PDF),
+        pensumProdukter,
+        produktHistorikk,
         malConfig: {
           navn: pdfMalConfig.navn,
           filnavn: pdfMalConfig.filnavn,
@@ -3043,8 +3107,8 @@ export default function PensumPrognoseModell() {
                           const hist = produktHistorikk[produktId];
                           if (hist && hist.data) {
                             hist.data.forEach(d => {
-                              const dato = new Date(d.dato + '-01');
-                              if (dato >= startDato) {
+                              const dato = parseHistorikkDato(d.dato);
+                              if (dato && dato >= startDato) {
                                 alleDatoer.add(d.dato);
                               }
                             });
@@ -3095,8 +3159,10 @@ export default function PensumPrognoseModell() {
                                 dataKey="dato" 
                                 tick={{ fontSize: 10, fill: '#6B7280' }}
                                 tickFormatter={(dato) => {
-                                  const [year, month] = dato.split('-');
-                                  return month === '01' || month === '07' ? `${month}/${year.slice(2)}` : '';
+                                  const parsed = parseHistorikkDato(dato);
+                                  if (!parsed) return '';
+                                  const m = parsed.getMonth() + 1;
+                                  return m === 1 || m === 7 ? `${String(m).padStart(2, '0')}/${String(parsed.getFullYear()).slice(2)}` : '';
                                 }}
                                 interval="preserveStartEnd"
                               />
@@ -3107,11 +3173,7 @@ export default function PensumPrognoseModell() {
                               />
                               <Tooltip 
                                 contentStyle={{ backgroundColor: 'white', border: '1px solid #E5E7EB', borderRadius: '8px', fontSize: '12px' }}
-                                labelFormatter={(dato) => {
-                                  const [year, month] = dato.split('-');
-                                  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Des'];
-                                  return `${monthNames[parseInt(month) - 1]} ${year}`;
-                                }}
+                                labelFormatter={(dato) => formatHistorikkEtikett(dato)}
                                 formatter={(value, name) => {
                                   const produktInfo = [...pensumProdukter.enkeltfond, ...pensumProdukter.fondsportefoljer].find(p => p.id === name);
                                   return [value.toFixed(1), produktInfo?.navn?.replace('Pensum ', '') || name];
@@ -3668,7 +3730,7 @@ export default function PensumPrognoseModell() {
           const alleDatoer = new Set();
           dashboardProdukter.forEach(id => {
             const hist = alleHistorikk[id];
-            if (hist && hist.data) hist.data.forEach(d => { if (new Date(d.dato + '-01') >= startDato) alleDatoer.add(d.dato); });
+            if (hist && hist.data) hist.data.forEach(d => { const parsed = parseHistorikkDato(d.dato); if (parsed && parsed >= startDato) alleDatoer.add(d.dato); });
           });
           const sorterteDatoer = Array.from(alleDatoer).sort();
           const chartData = sorterteDatoer.map(dato => {
@@ -3688,24 +3750,37 @@ export default function PensumPrognoseModell() {
           const beregnStatistikk = (id) => {
             const hist = alleHistorikk[id];
             if (!hist || !hist.data) return null;
-            const filtrert = hist.data.filter(d => new Date(d.dato + '-01') >= startDato);
+            const filtrert = [...hist.data]
+              .filter(d => {
+                const parsed = parseHistorikkDato(d.dato);
+                return parsed && parsed >= startDato && erGyldigTall(d.verdi);
+              })
+              .sort((a, b) => parseHistorikkDato(a.dato) - parseHistorikkDato(b.dato));
             if (filtrert.length < 3) return null;
             const avkastninger = [];
-            for (let i = 1; i < filtrert.length; i++) avkastninger.push((filtrert[i].verdi - filtrert[i-1].verdi) / filtrert[i-1].verdi);
+            for (let i = 1; i < filtrert.length; i++) {
+              const prev = filtrert[i - 1].verdi;
+              const curr = filtrert[i].verdi;
+              if (erGyldigTall(prev) && prev !== 0 && erGyldigTall(curr)) {
+                avkastninger.push((curr - prev) / prev);
+              }
+            }
             const n = avkastninger.length;
+            if (n === 0) return null;
+            const perioderPerAar = inferPerioderPerAarFraHistorikk(filtrert);
             const gjennomsnitt = avkastninger.reduce((s, v) => s + v, 0) / n;
-            const aarligAvkastning = ((filtrert[filtrert.length-1].verdi / filtrert[0].verdi) ** (12/n) - 1) * 100;
+            const aarligAvkastning = ((filtrert[filtrert.length-1].verdi / filtrert[0].verdi) ** (perioderPerAar / n) - 1) * 100;
             const varians = avkastninger.reduce((s, v) => s + (v - gjennomsnitt) ** 2, 0) / n;
-            const stdAvvik = Math.sqrt(varians) * Math.sqrt(12) * 100;
+            const stdAvvik = Math.sqrt(varians) * Math.sqrt(perioderPerAar) * 100;
             let maxDD = 0, peak = filtrert[0].verdi;
             const drawdownSerie = filtrert.map(d => {
               if (d.verdi > peak) peak = d.verdi;
-              const dd = (d.verdi - peak) / peak * 100;
+              const dd = peak > 0 ? (d.verdi - peak) / peak * 100 : 0;
               if (dd < maxDD) maxDD = dd;
               return { dato: d.dato, dd: parseFloat(dd.toFixed(2)) };
             });
             const totalAvk = ((filtrert[filtrert.length-1].verdi / filtrert[0].verdi) - 1) * 100;
-            const sharpe = (aarligAvkastning - 3) / stdAvvik;
+            const sharpe = stdAvvik > 0 ? (aarligAvkastning - 3) / stdAvvik : 0;
             return { id, aarligAvkastning: parseFloat(aarligAvkastning.toFixed(2)), totalAvkastning: parseFloat(totalAvk.toFixed(2)), standardavvik: parseFloat(stdAvvik.toFixed(1)), maxDrawdown: parseFloat(maxDD.toFixed(1)), sharpe: parseFloat(sharpe.toFixed(2)), drawdownSerie };
           };
           const allStatistikk = dashboardProdukter.map(id => beregnStatistikk(id)).filter(Boolean);
@@ -3771,7 +3846,7 @@ export default function PensumPrognoseModell() {
                           interval="preserveStartEnd" />
                         <YAxis tick={{ fontSize: 10, fill: "#6B7280" }} tickFormatter={(v) => v.toFixed(0)} domain={["dataMin - 5", "dataMax + 5"]} />
                         <Tooltip contentStyle={{ backgroundColor: "white", border: "1px solid #E5E7EB", borderRadius: "8px", fontSize: "12px" }}
-                          labelFormatter={(d) => { const [y, m] = d.split("-"); const mn = ["Jan","Feb","Mar","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Des"]; return mn[parseInt(m)-1] + " " + y; }}
+                          labelFormatter={(d) => formatHistorikkEtikett(d)}
                           formatter={(v, name) => [v.toFixed(1), produktNavn[name] || name]} />
                         <Legend verticalAlign="bottom" height={36} formatter={(v) => produktNavn[v] || v} />
                         <ReferenceLine y={100} stroke="#9CA3AF" strokeDasharray="5 5" />
@@ -4154,19 +4229,38 @@ export default function PensumPrognoseModell() {
                               risiko3ar: finnKolonne(['risiko3ar', 'risiko 3 år', 'risiko 3 aar'], 7)
                             };
 
+                            const idFraNavn = {};
+                            ['enkeltfond', 'fondsportefoljer', 'alternative'].forEach((kategori) => {
+                              (oppdaterteProdukter[kategori] || []).forEach((p) => {
+                                idFraNavn[String(p.id || '').toLowerCase().trim()] = p.id;
+                                idFraNavn[String(p.navn || '').toLowerCase().trim()] = p.id;
+                                idFraNavn[String(p.navn || '').replace(/^pensum\s+/i, '').toLowerCase().trim()] = p.id;
+                              });
+                            });
+
                             const startRad = harHeader ? 1 : 0;
                             json.slice(startRad).forEach(row => {
                               const idVerdi = row[col.id];
                               if (!idVerdi) return;
-                              const id = idVerdi.toString().toLowerCase().trim();
+                              const idRaa = idVerdi.toString().toLowerCase().trim();
+                              const id = idFraNavn[idRaa] || idRaa;
 
                               const lesTall = (feltNavn) => {
                                 const idx = col[feltNavn];
                                 if (idx === undefined || idx < 0) return undefined;
                                 const v = row[idx];
-                                if (v === undefined || v === '') return null;
-                                const num = parseFloat(v);
-                                return Number.isFinite(num) ? num : null;
+                                if (v === undefined || v === null || v === '') return null;
+                                if (typeof v === 'number') return Number.isFinite(v) ? v : null;
+                                let normalisert = String(v)
+                                  .replace(/%/g, '')
+                                  .replace(/\s+/g, '');
+                                if (normalisert.includes(',') && normalisert.includes('.')) {
+                                  normalisert = normalisert.replace(/\./g, '').replace(',', '.');
+                                } else if (normalisert.includes(',')) {
+                                  normalisert = normalisert.replace(',', '.');
+                                }
+                                const tall = parseFloat(normalisert);
+                                return Number.isFinite(tall) ? tall : null;
                               };
 
                               ['enkeltfond', 'fondsportefoljer', 'alternative'].forEach(kategori => {

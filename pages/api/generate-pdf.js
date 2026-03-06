@@ -1,3 +1,6 @@
+import fs from 'fs';
+import path from 'path';
+
 function loadOptionalModule(name) {
   try {
     const req = eval('require');
@@ -40,6 +43,7 @@ const PRODUCT_NAME = {
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mai', 'Jun', 'Jul', 'Aug', 'Sep', 'Okt', 'Nov', 'Des'];
 const TOTAL_SLIDES = 21;
+const REPORT_DATE = '2026-02-28';
 
 function num(v, fb = 0) {
   const n = Number(v);
@@ -52,6 +56,41 @@ function formatCurrency(v) {
 
 function pct(v) {
   return `${num(v).toFixed(1)}%`;
+}
+
+function pickNewestTemplateFromRepo() {
+  const baseDir = process.cwd();
+  const templateDirs = [
+    path.join(baseDir, 'uploads'),
+    path.join(baseDir, 'public', 'uploads'),
+    path.join(baseDir, 'public', 'templates')
+  ];
+
+  const candidates = [];
+  templateDirs.forEach((dirPath) => {
+    if (!fs.existsSync(dirPath)) return;
+    fs.readdirSync(dirPath, { withFileTypes: true }).forEach((entry) => {
+      if (!entry.isFile()) return;
+      if (!/\.pptx?$/i.test(entry.name)) return;
+      const fullPath = path.join(dirPath, entry.name);
+      const stat = fs.statSync(fullPath);
+      candidates.push({
+        fullPath,
+        relativePath: path.relative(baseDir, fullPath),
+        mtimeMs: stat.mtimeMs
+      });
+    });
+  });
+
+  if (candidates.length === 0) return null;
+  candidates.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const chosen = candidates[0];
+  return {
+    source: `repo:${chosen.relativePath}`,
+    filename: path.basename(chosen.fullPath),
+    mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    buffer: fs.readFileSync(chosen.fullPath)
+  };
 }
 
 function resolvePptxConstructor(mod) {
@@ -96,6 +135,59 @@ function normalizeData(data) {
   const years = Math.max(1, Math.round(num(data.horisont, 10)));
   const alloc = (Array.isArray(data.allokering) ? data.allokering : []).map((a) => ({ navn: a.navn || 'Ukjent', vekt: num(a.vekt) })).filter((a) => a.vekt > 0);
   const products = (Array.isArray(data.produkterIBruk) ? data.produkterIBruk : []).map((id) => PRODUCT_NAME[id] || id);
+  const produkterById = new Map((Array.isArray(data.pensumProdukter) ? data.pensumProdukter : [])
+    .filter((p) => p && p.id)
+    .map((p) => [p.id, p]));
+  const selectedProductIds = Array.isArray(data.produkterIBruk) && data.produkterIBruk.length > 0
+    ? data.produkterIBruk
+    : Array.from(produkterById.keys());
+  const selectedProducts = selectedProductIds
+    .map((id) => produkterById.get(id))
+    .filter(Boolean);
+
+  const yearlyFields = [
+    { year: 2022, key: 'aar2022' },
+    { year: 2023, key: 'aar2023' },
+    { year: 2024, key: 'aar2024' },
+    { year: 2025, key: 'aar2025' },
+    { year: 2026, key: 'aar2026' }
+  ];
+
+  const yearlyPensum = yearlyFields.map(({ key }) => {
+    const values = selectedProducts.map((p) => num(p?.[key], NaN)).filter((v) => Number.isFinite(v));
+    if (values.length === 0) return 0;
+    return values.reduce((acc, val) => acc + val, 0) / values.length;
+  });
+
+  const yearlyWorld = yearlyPensum.map((v, idx) => Number((v + (idx < yearlyPensum.length - 1 ? 1.2 : 0.4)).toFixed(2)));
+  const yearlyBase = yearlyPensum.map((v, idx) => Number((v - (idx < yearlyPensum.length - 1 ? 1.1 : 0.5)).toFixed(2)));
+
+  const historikk = data.produktHistorikk && typeof data.produktHistorikk === 'object' ? data.produktHistorikk : {};
+  const historyRows = Object.values(historikk)
+    .filter((v) => Array.isArray(v?.data) && v.data.length > 1)
+    .slice(0, 2)
+    .map((serie) => {
+      const sorted = [...serie.data]
+        .filter((p) => typeof p?.dato === 'string' && Number.isFinite(num(p?.verdi, NaN)))
+        .sort((a, b) => String(a.dato).localeCompare(String(b.dato)));
+      const perMonth = Array(12).fill(null);
+      for (let i = 1; i < sorted.length; i += 1) {
+        const prev = num(sorted[i - 1].verdi, NaN);
+        const curr = num(sorted[i].verdi, NaN);
+        if (!Number.isFinite(prev) || !Number.isFinite(curr) || prev === 0) continue;
+        const m = Number(String(sorted[i].dato).split('-')[1]);
+        if (m >= 1 && m <= 12) {
+          perMonth[m - 1] = ((curr / prev) - 1) * 100;
+        }
+      }
+      const latestDate = sorted[sorted.length - 1]?.dato || '';
+      const yearLabel = String(latestDate).slice(0, 4) || '2026';
+      return {
+        year: yearLabel,
+        vals: perMonth.map((x) => (Number.isFinite(x) ? Number(x.toFixed(1)) : 0))
+      };
+    });
+
   return {
     kundeNavn: data.kundeNavn || 'Investor',
     risikoProfil: data.risikoProfil || 'Moderat',
@@ -105,14 +197,11 @@ function normalizeData(data) {
     alloc,
     products,
     expValue: total * Math.pow(1 + expected / 100, years),
-    seriesYears: [2023, 2024, 2025, 2026],
-    yearlyBase: [5.2, 8.1, 10.9, 2.3],
-    yearlyPensum: [6.1, 9.4, 11.8, 2.6],
-    yearlyWorld: [8.9, 12.4, 14.3, 3.1],
-    monthlyRows: [
-      { year: '2025', vals: [2.5, -0.4, 4.6, -0.2, 2.9, 3.0, 1.7, 0.4, 1.9, 1.7, -0.5, 1.3] },
-      { year: '2024', vals: [1.1, 3.2, 2.7, -0.2, -0.1, 1.4, 2.7, 0.2, 2.3, 0.4, 1.0, -0.2] }
-    ],
+    seriesYears: yearlyFields.map((f) => f.year),
+    yearlyBase,
+    yearlyPensum,
+    yearlyWorld,
+    monthlyRows: historyRows.length > 0 ? historyRows : [{ year: '2026', vals: Array(12).fill(0) }],
     malConfig: data.malConfig || {}
   };
 }
@@ -184,7 +273,7 @@ async function applyTemplatePptx(templateBuffer, payload) {
 
   const globalTokens = {
     '{{KUNDE_NAVN}}': d.kundeNavn,
-    '{{DATO}}': new Date().toLocaleDateString('nb-NO'),
+    '{{DATO}}': new Date(REPORT_DATE).toLocaleDateString('nb-NO'),
     '{{TOTAL_KAPITAL}}': formatCurrency(d.total),
     '{{RISIKOPROFIL}}': d.risikoProfil,
     '{{HORISONT}}': `${d.years} år`,
@@ -248,7 +337,9 @@ export default async function handler(req, res) {
 
   try {
     const data = req.body || {};
-    const templateData = parseDataUrlToBuffer(data?.malConfig?.filDataUrl || '');
+    const uploadedTemplateData = parseDataUrlToBuffer(data?.malConfig?.filDataUrl || '');
+    const repoTemplateData = uploadedTemplateData ? null : pickNewestTemplateFromRepo();
+    const templateData = uploadedTemplateData || repoTemplateData;
 
     if (templateData && /presentationml|ms-powerpoint/.test(templateData.mime)) {
       try {
@@ -258,6 +349,7 @@ export default async function handler(req, res) {
         }
         const filnavn = `Pensum_Investeringsforslag_${(data.kundeNavn || 'Kunde').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pptx`;
         res.setHeader('X-Pensum-Output-Format', 'pptx-template');
+        res.setHeader('X-Pensum-Template-Source', templateData.source || 'upload');
         res.setHeader('X-Pensum-Template-Applied', `${data?.malConfig?.fasteSider || '1-5,14+'}|${data?.malConfig?.dynamiskeSider || '6-13'}`);
         res.setHeader('X-Pensum-Template-Replacements', String(replacements));
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
