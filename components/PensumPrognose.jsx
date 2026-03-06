@@ -668,6 +668,34 @@ export default function PensumPrognoseModell() {
   });
   
   // Last admin-data fra storage ved oppstart
+
+  const beregnAarsavkastningFraHistorikk = useCallback((produktId, aar) => {
+    const hist = produktHistorikk?.[produktId];
+    const data = Array.isArray(hist?.data) ? hist.data : [];
+    const sortert = data
+      .filter((punkt) => erGyldigTall(punkt?.verdi) && parseHistorikkDato(punkt?.dato))
+      .sort((a, b) => parseHistorikkDato(a.dato) - parseHistorikkDato(b.dato));
+    if (sortert.length < 2) return null;
+
+    const startDato = new Date(aar, 0, 1);
+    const sluttDato = aar === 2026 ? RAPPORT_DATO_OBJEKT : new Date(aar, 11, 31);
+
+    const startKandidat = sortert.filter((punkt) => parseHistorikkDato(punkt.dato) <= startDato).slice(-1)[0]
+      || sortert.find((punkt) => parseHistorikkDato(punkt.dato) >= startDato);
+    const sluttKandidat = sortert.filter((punkt) => {
+      const dato = parseHistorikkDato(punkt.dato);
+      return dato && dato >= startDato && dato <= sluttDato;
+    }).slice(-1)[0];
+
+    if (!startKandidat || !sluttKandidat || startKandidat === sluttKandidat || !erGyldigTall(startKandidat.verdi) || startKandidat.verdi === 0) return null;
+    return ((sluttKandidat.verdi / startKandidat.verdi) - 1) * 100;
+  }, [produktHistorikk]);
+
+  const hentAarsverdiForProdukt = useCallback((produkt, felt, aar) => {
+    if (erGyldigTall(produkt?.[felt])) return produkt[felt];
+    return beregnAarsavkastningFraHistorikk(produkt?.id, aar);
+  }, [beregnAarsavkastningFraHistorikk]);
+
   useEffect(() => {
     const lastAdminData = async () => {
       try {
@@ -3281,31 +3309,45 @@ export default function PensumPrognoseModell() {
                       <tr className="bg-gray-100">
                         <td colSpan="8" className="py-2 px-4 font-semibold text-xs" style={{ color: PENSUM_COLORS.salmon }}>ENKELTFOND</td>
                       </tr>
-                      {pensumProdukter.enkeltfond.map((p, idx) => (
+                      {pensumProdukter.enkeltfond.map((p, idx) => {
+                        const aar2026 = hentAarsverdiForProdukt(p, 'aar2026', 2026);
+                        const aar2025 = hentAarsverdiForProdukt(p, 'aar2025', 2025);
+                        const aar2024 = hentAarsverdiForProdukt(p, 'aar2024', 2024);
+                        const aar2023 = hentAarsverdiForProdukt(p, 'aar2023', 2023);
+                        const aar2022 = hentAarsverdiForProdukt(p, 'aar2022', 2022);
+                        return (
                         <tr key={p.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                           <td className="py-2 px-4 font-medium" style={{ color: PENSUM_COLORS.darkBlue }}>{p.navn}</td>
-                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2026) ? (p.aar2026 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2026) ? p.aar2026.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2025) ? (p.aar2025 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2025) ? p.aar2025.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2024) ? (p.aar2024 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2024) ? p.aar2024.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2023) ? (p.aar2023 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2023) ? p.aar2023.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2022) ? (p.aar2022 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2022) ? p.aar2022.toFixed(1) + '%' : '—'}</td>
-                          {(() => { const nokkeltall = beregnProduktNokkeltall(p); return <><td className={"py-2 px-3 text-right " + (erGyldigTall(nokkeltall.aarlig3ar) ? (nokkeltall.aarlig3ar >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(nokkeltall.aarlig3ar) ? nokkeltall.aarlig3ar.toFixed(1) + '%' : '—'}</td><td className="py-2 px-3 text-right text-gray-600">{erGyldigTall(nokkeltall.risiko3ar) ? nokkeltall.risiko3ar.toFixed(1) + '%' : '—'}</td></>; })()}
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(aar2026) ? (aar2026 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(aar2026) ? aar2026.toFixed(1) + '%' : '—'}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(aar2025) ? (aar2025 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(aar2025) ? aar2025.toFixed(1) + '%' : '—'}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(aar2024) ? (aar2024 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(aar2024) ? aar2024.toFixed(1) + '%' : '—'}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(aar2023) ? (aar2023 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(aar2023) ? aar2023.toFixed(1) + '%' : '—'}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(aar2022) ? (aar2022 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(aar2022) ? aar2022.toFixed(1) + '%' : '—'}</td>
+                          {(() => { const nokkeltall = beregnProduktNokkeltall({ ...p, aar2026, aar2025, aar2024, aar2023, aar2022 }); return <><td className={"py-2 px-3 text-right " + (erGyldigTall(nokkeltall.aarlig3ar) ? (nokkeltall.aarlig3ar >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(nokkeltall.aarlig3ar) ? nokkeltall.aarlig3ar.toFixed(1) + '%' : '—'}</td><td className="py-2 px-3 text-right text-gray-600">{erGyldigTall(nokkeltall.risiko3ar) ? nokkeltall.risiko3ar.toFixed(1) + '%' : '—'}</td></>; })()}
                         </tr>
-                      ))}
+                        );
+                      })}
                       <tr className="bg-gray-100">
                         <td colSpan="8" className="py-2 px-4 font-semibold text-xs" style={{ color: PENSUM_COLORS.salmon }}>FONDSPORTEFØLJER</td>
                       </tr>
-                      {pensumProdukter.fondsportefoljer.map((p, idx) => (
+                      {pensumProdukter.fondsportefoljer.map((p, idx) => {
+                        const aar2026 = hentAarsverdiForProdukt(p, 'aar2026', 2026);
+                        const aar2025 = hentAarsverdiForProdukt(p, 'aar2025', 2025);
+                        const aar2024 = hentAarsverdiForProdukt(p, 'aar2024', 2024);
+                        const aar2023 = hentAarsverdiForProdukt(p, 'aar2023', 2023);
+                        const aar2022 = hentAarsverdiForProdukt(p, 'aar2022', 2022);
+                        return (
                         <tr key={p.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                           <td className="py-2 px-4 font-medium" style={{ color: PENSUM_COLORS.darkBlue }}>{p.navn}</td>
-                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2026) ? (p.aar2026 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2026) ? p.aar2026.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2025) ? (p.aar2025 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2025) ? p.aar2025.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2024) ? (p.aar2024 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2024) ? p.aar2024.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2023) ? (p.aar2023 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2023) ? p.aar2023.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2022) ? (p.aar2022 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2022) ? p.aar2022.toFixed(1) + '%' : '—'}</td>
-                          {(() => { const nokkeltall = beregnProduktNokkeltall(p); return <><td className={"py-2 px-3 text-right " + (erGyldigTall(nokkeltall.aarlig3ar) ? (nokkeltall.aarlig3ar >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(nokkeltall.aarlig3ar) ? nokkeltall.aarlig3ar.toFixed(1) + '%' : '—'}</td><td className="py-2 px-3 text-right text-gray-600">{erGyldigTall(nokkeltall.risiko3ar) ? nokkeltall.risiko3ar.toFixed(1) + '%' : '—'}</td></>; })()}
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(aar2026) ? (aar2026 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(aar2026) ? aar2026.toFixed(1) + '%' : '—'}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(aar2025) ? (aar2025 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(aar2025) ? aar2025.toFixed(1) + '%' : '—'}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(aar2024) ? (aar2024 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(aar2024) ? aar2024.toFixed(1) + '%' : '—'}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(aar2023) ? (aar2023 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(aar2023) ? aar2023.toFixed(1) + '%' : '—'}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(aar2022) ? (aar2022 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(aar2022) ? aar2022.toFixed(1) + '%' : '—'}</td>
+                          {(() => { const nokkeltall = beregnProduktNokkeltall({ ...p, aar2026, aar2025, aar2024, aar2023, aar2022 }); return <><td className={"py-2 px-3 text-right " + (erGyldigTall(nokkeltall.aarlig3ar) ? (nokkeltall.aarlig3ar >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(nokkeltall.aarlig3ar) ? nokkeltall.aarlig3ar.toFixed(1) + '%' : '—'}</td><td className="py-2 px-3 text-right text-gray-600">{erGyldigTall(nokkeltall.risiko3ar) ? nokkeltall.risiko3ar.toFixed(1) + '%' : '—'}</td></>; })()}
                         </tr>
-                      ))}
+                        );
+                      })}
                       {visAlternative && (
                         <>
                           <tr className="bg-amber-100">
