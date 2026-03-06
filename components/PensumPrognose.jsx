@@ -92,6 +92,22 @@ function validerSiderFormat(tekst) {
 
 
 const RAPPORT_MAANED = '2026-02';
+const RAPPORT_DATO_OBJEKT = (() => {
+  const [d, m, y] = RAPPORT_DATO.split('.').map(Number);
+  return new Date(y, m - 1, d);
+})();
+
+const finnStartVerdiVedPeriode = (data = [], startDato) => {
+  if (!Array.isArray(data) || data.length === 0) return 100;
+  let sisteFoerEllerLik = null;
+  let forsteEtter = null;
+  data.forEach((punkt) => {
+    const dato = new Date(punkt.dato + '-01');
+    if (dato <= startDato) sisteFoerEllerLik = punkt;
+    if (!forsteEtter && dato >= startDato) forsteEtter = punkt;
+  });
+  return (sisteFoerEllerLik || forsteEtter || data[0]).verdi || 100;
+};
 const HISTORIKK_2026_YTD = {
   'global-core-active': -2.0,
   'global-edge': 0.6,
@@ -2937,11 +2953,11 @@ export default function PensumPrognoseModell() {
                   <h4 className="font-semibold mb-3" style={{ color: PENSUM_COLORS.darkBlue }}>Din porteføljes historiske avkastning</h4>
                   <div className="grid grid-cols-5 gap-4 text-center">
                     {[
+                      { aar: '2026 YTD', key: 'aar2026' },
+                      { aar: '2025', key: 'aar2025' },
                       { aar: '2024', key: 'aar2024' },
                       { aar: '2023', key: 'aar2023' },
-                      { aar: '2022', key: 'aar2022' },
-                      { aar: '2021', key: 'aar2021' },
-                      { aar: '2020', key: 'aar2020' }
+                      { aar: '2022', key: 'aar2022' }
                     ].map(({ aar, key }) => (
                       <div key={aar}>
                         <p className="text-xs text-gray-500 mb-1">{aar}</p>
@@ -3011,11 +3027,10 @@ export default function PensumPrognoseModell() {
                     <div className="h-80">
                       {(() => {
                         // Filtrer data basert på periode
-                        const now = new Date();
                         const periodeFilter = {
-                          '1y': new Date(now.getFullYear() - 1, now.getMonth(), 1),
-                          '3y': new Date(now.getFullYear() - 3, now.getMonth(), 1),
-                          '5y': new Date(now.getFullYear() - 5, now.getMonth(), 1),
+                          '1y': new Date(RAPPORT_DATO_OBJEKT.getFullYear() - 1, RAPPORT_DATO_OBJEKT.getMonth(), 1),
+                          '3y': new Date(RAPPORT_DATO_OBJEKT.getFullYear() - 3, RAPPORT_DATO_OBJEKT.getMonth(), 1),
+                          '5y': new Date(RAPPORT_DATO_OBJEKT.getFullYear() - 5, RAPPORT_DATO_OBJEKT.getMonth(), 1),
                           'max': new Date(2015, 0, 1)
                         };
                         const startDato = periodeFilter[historikkPeriode];
@@ -3046,8 +3061,7 @@ export default function PensumPrognoseModell() {
                               const match = hist.data.find(d => d.dato === dato);
                               if (match) {
                                 // Reindekserer til 100 ved start av valgt periode
-                                const startMatch = hist.data.find(d => new Date(d.dato + '-01') >= startDato);
-                                const startVerdi = startMatch ? startMatch.verdi : 100;
+                                const startVerdi = finnStartVerdiVedPeriode(hist.data, startDato);
                                 punkt[produktId] = (match.verdi / startVerdi) * 100;
                               }
                             }
@@ -3148,18 +3162,16 @@ export default function PensumPrognoseModell() {
                           if (!hist || !hist.data || hist.data.length < 2) return null;
                           
                           // Beregn avkastning for valgt periode
-                          const now = new Date();
                           const periodeFilter = {
-                            '1y': new Date(now.getFullYear() - 1, now.getMonth(), 1),
-                            '3y': new Date(now.getFullYear() - 3, now.getMonth(), 1),
-                            '5y': new Date(now.getFullYear() - 5, now.getMonth(), 1),
+                            '1y': new Date(RAPPORT_DATO_OBJEKT.getFullYear() - 1, RAPPORT_DATO_OBJEKT.getMonth(), 1),
+                            '3y': new Date(RAPPORT_DATO_OBJEKT.getFullYear() - 3, RAPPORT_DATO_OBJEKT.getMonth(), 1),
+                            '5y': new Date(RAPPORT_DATO_OBJEKT.getFullYear() - 5, RAPPORT_DATO_OBJEKT.getMonth(), 1),
                             'max': new Date(2015, 0, 1)
                           };
                           const startDato = periodeFilter[historikkPeriode];
                           
-                          const startMatch = hist.data.find(d => new Date(d.dato + '-01') >= startDato);
                           const sluttVerdi = hist.data[hist.data.length - 1].verdi;
-                          const startVerdi = startMatch ? startMatch.verdi : hist.data[0].verdi;
+                          const startVerdi = finnStartVerdiVedPeriode(hist.data, startDato);
                           const avkastning = ((sluttVerdi / startVerdi) - 1) * 100;
                           
                           return (
@@ -3182,7 +3194,7 @@ export default function PensumPrognoseModell() {
                     {/* Disclaimer */}
                     <div className="mt-4 text-xs text-gray-500 p-3 bg-gray-50 rounded-lg">
                       <strong>Viktig informasjon om avkastning:</strong> Historikk er indeksert til 100 ved start av valgt periode. 
-                      Historikk er oppdatert til og med 31.01.2026 (2026 vises som YTD). For flere produkter er historikk før oppstart estimert - se produktdetaljer for mer informasjon. 
+                      Historikk er oppdatert til og med {RAPPORT_DATO} (2026 vises som YTD). For flere produkter er historikk før oppstart estimert - se produktdetaljer for mer informasjon. 
                       Historisk avkastning er ingen garanti for fremtidig avkastning.
                     </div>
                   </div>
@@ -3194,11 +3206,11 @@ export default function PensumPrognoseModell() {
                     <thead>
                       <tr style={{ backgroundColor: PENSUM_COLORS.darkBlue }}>
                         <th className="py-3 px-4 text-left text-white">Navn</th>
+                        <th className="py-3 px-3 text-right text-white">2026 YTD</th>
+                        <th className="py-3 px-3 text-right text-white">2025</th>
                         <th className="py-3 px-3 text-right text-white">2024</th>
                         <th className="py-3 px-3 text-right text-white">2023</th>
                         <th className="py-3 px-3 text-right text-white">2022</th>
-                        <th className="py-3 px-3 text-right text-white">2021</th>
-                        <th className="py-3 px-3 text-right text-white">2020</th>
                         <th className="py-3 px-3 text-right text-white">Årlig 3 år</th>
                         <th className="py-3 px-3 text-right text-white">Risiko 3 år</th>
                       </tr>
@@ -3210,11 +3222,11 @@ export default function PensumPrognoseModell() {
                       {pensumProdukter.enkeltfond.map((p, idx) => (
                         <tr key={p.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                           <td className="py-2 px-4 font-medium" style={{ color: PENSUM_COLORS.darkBlue }}>{p.navn}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2026) ? (p.aar2026 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2026) ? p.aar2026.toFixed(1) + '%' : '—'}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2025) ? (p.aar2025 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2025) ? p.aar2025.toFixed(1) + '%' : '—'}</td>
                           <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2024) ? (p.aar2024 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2024) ? p.aar2024.toFixed(1) + '%' : '—'}</td>
                           <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2023) ? (p.aar2023 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2023) ? p.aar2023.toFixed(1) + '%' : '—'}</td>
                           <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2022) ? (p.aar2022 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2022) ? p.aar2022.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2021) ? (p.aar2021 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2021) ? p.aar2021.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2020) ? (p.aar2020 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2020) ? p.aar2020.toFixed(1) + '%' : '—'}</td>
                           {(() => { const nokkeltall = beregnProduktNokkeltall(p); return <><td className={"py-2 px-3 text-right " + (erGyldigTall(nokkeltall.aarlig3ar) ? (nokkeltall.aarlig3ar >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(nokkeltall.aarlig3ar) ? nokkeltall.aarlig3ar.toFixed(1) + '%' : '—'}</td><td className="py-2 px-3 text-right text-gray-600">{erGyldigTall(nokkeltall.risiko3ar) ? nokkeltall.risiko3ar.toFixed(1) + '%' : '—'}</td></>; })()}
                         </tr>
                       ))}
@@ -3224,11 +3236,11 @@ export default function PensumPrognoseModell() {
                       {pensumProdukter.fondsportefoljer.map((p, idx) => (
                         <tr key={p.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                           <td className="py-2 px-4 font-medium" style={{ color: PENSUM_COLORS.darkBlue }}>{p.navn}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2026) ? (p.aar2026 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2026) ? p.aar2026.toFixed(1) + '%' : '—'}</td>
+                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2025) ? (p.aar2025 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2025) ? p.aar2025.toFixed(1) + '%' : '—'}</td>
                           <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2024) ? (p.aar2024 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2024) ? p.aar2024.toFixed(1) + '%' : '—'}</td>
                           <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2023) ? (p.aar2023 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2023) ? p.aar2023.toFixed(1) + '%' : '—'}</td>
                           <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2022) ? (p.aar2022 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2022) ? p.aar2022.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2021) ? (p.aar2021 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2021) ? p.aar2021.toFixed(1) + '%' : '—'}</td>
-                          <td className={"py-2 px-3 text-right " + (erGyldigTall(p.aar2020) ? (p.aar2020 >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(p.aar2020) ? p.aar2020.toFixed(1) + '%' : '—'}</td>
                           {(() => { const nokkeltall = beregnProduktNokkeltall(p); return <><td className={"py-2 px-3 text-right " + (erGyldigTall(nokkeltall.aarlig3ar) ? (nokkeltall.aarlig3ar >= 0 ? 'text-green-600' : 'text-red-600') : 'text-gray-400')}>{erGyldigTall(nokkeltall.aarlig3ar) ? nokkeltall.aarlig3ar.toFixed(1) + '%' : '—'}</td><td className="py-2 px-3 text-right text-gray-600">{erGyldigTall(nokkeltall.risiko3ar) ? nokkeltall.risiko3ar.toFixed(1) + '%' : '—'}</td></>; })()}
                         </tr>
                       ))}
@@ -3272,19 +3284,37 @@ export default function PensumPrognoseModell() {
             'Oslo Børs': { farge: '#EA580C', data: { 2015: 0.0, 2016: 15.9, 2017: 17.7, 2018: -3.2, 2019: 12.3, 2020: 2.9, 2021: 23.1, 2022: -1.1, 2023: 10.5, 2024: 9.0, 2025: 14.3, 2026: 3.7 } },
             'Norske Statsobl.': { farge: '#64748B', data: { 2015: 0.0, 2016: 0.5, 2017: 0.6, 2018: 0.4, 2019: 1.0, 2020: 1.5, 2021: -0.1, 2022: 0.8, 2023: 3.0, 2024: 3.8, 2025: 3.8, 2026: 0.3 } },
           };
-          const PENSUM_AARLIG = {
-            'Basis': { farge: '#1B3A5F', data: { 2015: null, 2016: null, 2017: null, 2018: null, 2019: 0.0, 2020: 7.5, 2021: 11.0, 2022: -2.9, 2023: 11.6, 2024: 13.2, 2025: 4.3, 2026: -0.1 } },
-            'Fin. Opp.': { farge: '#D4886B', data: { 2015: null, 2016: null, 2017: null, 2018: null, 2019: null, 2020: null, 2021: null, 2022: -12.4, 2023: 10.2, 2024: 11.0, 2025: 9.0, 2026: 0.9 } },
-            'Global Core Active': { farge: '#0D2240', data: { 2015: 0.0, 2016: 3.7, 2017: 15.5, 2018: -5.5, 2019: 25.1, 2020: 11.8, 2021: 23.1, 2022: -7.4, 2023: 23.2, 2024: 32.9, 2025: 7.6, 2026: -2.0 } },
-            'Global Edge': { farge: '#5B9BD5', data: { 2015: null, 2016: null, 2017: null, 2018: null, 2019: 0.0, 2020: 2.3, 2021: 2.2, 2022: -12.1, 2023: 11.0, 2024: 9.8, 2025: 9.4, 2026: 0.6 } },
-            'Global Energy': { farge: '#F59E0B', data: { 2015: null, 2016: null, 2017: null, 2018: null, 2019: null, 2020: 91.3, 2021: 24.0, 2022: 55.6, 2023: 9.3, 2024: -3.2, 2025: 5.7, 2026: 7.8 } },
-            'Global Høyrente': { farge: '#16A34A', data: { 2015: null, 2016: 5.5, 2017: 4.5, 2018: -1.2, 2019: 6.2, 2020: 2.5, 2021: 5.3, 2022: -5.1, 2023: 7.6, 2024: 6.6, 2025: 5.9, 2026: 0.7 } },
-            'Nordic Banking': { farge: '#0891B2', data: { 2015: null, 2016: null, 2017: null, 2018: null, 2019: null, 2020: 56.1, 2021: 49.4, 2022: -9.3, 2023: 17.1, 2024: 26.2, 2025: 25.8, 2026: -1.1 } },
-            'Nordisk Høyrente': { farge: '#7C3AED', data: { 2015: null, 2016: null, 2017: null, 2018: null, 2019: null, 2020: -0.6, 2021: 8.9, 2022: 4.3, 2023: 11.2, 2024: 8.6, 2025: 6.3, 2026: 0.6 } },
-            'Norske Aksjer': { farge: '#DC2626', data: { 2015: 0.0, 2016: 29.5, 2017: 15.6, 2018: -0.4, 2019: 25.5, 2020: 20.2, 2021: 26.7, 2022: 4.2, 2023: 13.6, 2024: 10.7, 2025: 17.8, 2026: 2.2 } },
-          };
+          const PENSUM_AARLIG = (() => {
+            const produktMap = [...pensumProdukter.enkeltfond, ...pensumProdukter.fondsportefoljer].reduce((acc, p) => {
+              acc[p.id] = p;
+              return acc;
+            }, {});
+            const cfg = [
+              ['Basis', 'basis', '#1B3A5F'],
+              ['Fin. Opp.', 'financial-d', '#D4886B'],
+              ['Global Core Active', 'global-core-active', '#0D2240'],
+              ['Global Edge', 'global-edge', '#5B9BD5'],
+              ['Global Energy', 'energy-a', '#F59E0B'],
+              ['Global Høyrente', 'global-hoyrente', '#16A34A'],
+              ['Nordic Banking', 'banking-d', '#0891B2'],
+              ['Nordisk Høyrente', 'nordisk-hoyrente', '#7C3AED'],
+              ['Norske Aksjer', 'norge-a', '#DC2626']
+            ];
+            const arMapping = { 2022: 'aar2022', 2023: 'aar2023', 2024: 'aar2024', 2025: 'aar2025', 2026: 'aar2026' };
+            return cfg.reduce((acc, [label, id, farge]) => {
+              const p = produktMap[id] || {};
+              const data = Object.keys(arMapping).reduce((arAcc, ar) => {
+                const felt = arMapping[ar];
+                const v = p[felt];
+                arAcc[Number(ar)] = Number.isFinite(v) ? v : null;
+                return arAcc;
+              }, {});
+              acc[label] = { farge, data };
+              return acc;
+            }, {});
+          })();
 
-          const AAR_KOLONNER = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023, 2024, 2025, 2026];
+                    const AAR_KOLONNER = [2022, 2023, 2024, 2025, 2026];
 
           const heatmapFarge = (v) => {
             if (v === null) return 'transparent';
@@ -3318,7 +3348,7 @@ export default function PensumPrognoseModell() {
                              sammenligningPeriodeScen === 'YTD' ? 2026 :
                              sammenligningPeriodeScen === '1Å' ? 2025 :
                              sammenligningPeriodeScen === '3Å' ? 2023 :
-                             sammenligningPeriodeScen === '5Å' ? 2021 : 2015;
+                             sammenligningPeriodeScen === '5Å' ? 2022 : 2022;
             const data = [];
             // Accumulate from startAar
             const alleNavn = [...valgtePensumScen, ...valgteIndekserScen];
@@ -3618,9 +3648,9 @@ export default function PensumPrognoseModell() {
 
         {activeTab === 'dashboard' && (() => {
           const periodeFilter = {
-            '1y': new Date(new Date().getFullYear() - 1, new Date().getMonth(), 1),
-            '3y': new Date(new Date().getFullYear() - 3, new Date().getMonth(), 1),
-            '5y': new Date(new Date().getFullYear() - 5, new Date().getMonth(), 1),
+            '1y': new Date(RAPPORT_DATO_OBJEKT.getFullYear() - 1, RAPPORT_DATO_OBJEKT.getMonth(), 1),
+            '3y': new Date(RAPPORT_DATO_OBJEKT.getFullYear() - 3, RAPPORT_DATO_OBJEKT.getMonth(), 1),
+            '5y': new Date(RAPPORT_DATO_OBJEKT.getFullYear() - 5, RAPPORT_DATO_OBJEKT.getMonth(), 1),
             'max': new Date(2015, 0, 1)
           };
           const startDato = periodeFilter[dashboardPeriode];
@@ -3648,8 +3678,7 @@ export default function PensumPrognoseModell() {
               if (hist && hist.data) {
                 const match = hist.data.find(d => d.dato === dato);
                 if (match) {
-                  const startMatch = hist.data.find(d => new Date(d.dato + '-01') >= startDato);
-                  const startVerdi = startMatch ? startMatch.verdi : 100;
+                  const startVerdi = finnStartVerdiVedPeriode(hist.data, startDato);
                   punkt[id] = parseFloat(((match.verdi / startVerdi) * 100).toFixed(2));
                 }
               }
