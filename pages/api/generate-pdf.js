@@ -1,22 +1,13 @@
 import fs from 'fs';
 import path from 'path';
+import PptxGenJSImport from 'pptxgenjs';
+import JSZipImport from 'jszip';
 
-function loadOptionalModule(name) {
-  try {
-    const req = eval('require');
-    return req(name);
-  } catch (_) {
-    return null;
-  }
-}
+const PptxGenJS = typeof PptxGenJSImport === 'function'
+  ? PptxGenJSImport
+  : (PptxGenJSImport?.default || PptxGenJSImport?.PptxGenJS);
 
-function getPptxModule() {
-  return loadOptionalModule('pptxgenjs');
-}
-
-function getJSZipModule() {
-  return loadOptionalModule('jszip');
-}
+const JSZip = JSZipImport?.default || JSZipImport;
 
 const COLORS = {
   navy: '0D2240',
@@ -91,14 +82,6 @@ function pickNewestTemplateFromRepo() {
     mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
     buffer: fs.readFileSync(chosen.fullPath)
   };
-}
-
-function resolvePptxConstructor(mod) {
-  if (typeof mod === 'function') return mod;
-  if (mod && typeof mod.default === 'function') return mod.default;
-  if (mod && mod.default && typeof mod.default.default === 'function') return mod.default.default;
-  if (mod && typeof mod.PptxGenJS === 'function') return mod.PptxGenJS;
-  return null;
 }
 
 function parsePageSpec(spec = '', maxPage = TOTAL_SLIDES) {
@@ -330,8 +313,6 @@ function dynamicSlideText(pageNo, d) {
 
 async function applyTemplatePptx(templateBuffer, payload) {
   const d = normalizeData(payload);
-  const JSZipMod = getJSZipModule();
-  const JSZip = JSZipMod?.default || JSZipMod;
   if (!JSZip || !JSZip.loadAsync) throw new Error('jszip ikke tilgjengelig i runtime');
   const zip = await JSZip.loadAsync(templateBuffer);
   const fixedSet = parsePageSpec(d?.malConfig?.fasteSider || '1-5,14+', TOTAL_SLIDES);
@@ -428,8 +409,6 @@ export default async function handler(req, res) {
     }
 
     try {
-      const PptxModule = getPptxModule();
-      const PptxGenJS = resolvePptxConstructor(PptxModule);
       if (!PptxGenJS) throw new Error('pptxgenjs ikke tilgjengelig');
       const pptx = buildPptx(PptxGenJS, data);
       const buffer = await pptx.write({ outputType: 'nodebuffer' });
