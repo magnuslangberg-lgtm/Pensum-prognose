@@ -143,6 +143,7 @@ function fordelRestVektListe(items = [], index, newVekt) {
 const RAPPORT_MAANED = '2026-02';
 const RAPPORT_DATO_ISO = '2026-02-28';
 const DEFAULT_TEMPLATE_FILENAME = 'Mal - Forslag til investeringsportefølje 2026.pptx';
+const erPptTemplateFilnavn = (filnavn = '') => /\.(ppt|pptx)$/i.test(String(filnavn || '').trim());
 const RAPPORT_DATO_OBJEKT = (() => {
   const [d, m, y] = RAPPORT_DATO.split('.').map(Number);
   return new Date(y, m - 1, d);
@@ -727,11 +728,14 @@ export default function PensumPrognoseModell() {
     erGyldigFasteSider &&
     erGyldigDynamiskeSider
   ), [pdfMalConfig, erGyldigFasteSider, erGyldigDynamiskeSider]);
-  const malKreverOpplasting = useMemo(() => (
-    Boolean(pdfMalConfig?.filnavn) &&
-    !pdfMalConfig?.filDataUrl &&
-    String(pdfMalConfig?.filnavn).toLowerCase() !== DEFAULT_TEMPLATE_FILENAME.toLowerCase()
-  ), [pdfMalConfig?.filnavn, pdfMalConfig?.filDataUrl]);
+  const malKreverOpplasting = useMemo(() => {
+    const filnavn = String(pdfMalConfig?.filnavn || '').trim();
+    if (!filnavn) return false;
+    const erStandardmal = filnavn.toLowerCase() === DEFAULT_TEMPLATE_FILENAME.toLowerCase();
+    if (erStandardmal) return false;
+    if (!erPptTemplateFilnavn(filnavn)) return true;
+    return !pdfMalConfig?.filDataUrl;
+  }, [pdfMalConfig?.filnavn, pdfMalConfig?.filDataUrl]);
   
   // Standard avkastningsrater (kan endres av admin)
   const [avkastningsrater, setAvkastningsrater] = useState({
@@ -791,7 +795,7 @@ export default function PensumPrognoseModell() {
           setPdfMalConfig((prev) => ({
             ...prev,
             ...lagret,
-            filnavn: lagret?.filnavn || DEFAULT_TEMPLATE_FILENAME,
+            filnavn: erPptTemplateFilnavn(lagret?.filnavn) ? lagret.filnavn : DEFAULT_TEMPLATE_FILENAME,
             navn: lagret?.navn || 'Pensum standardmal 2026',
             fasteSider: lagret?.fasteSider || '1-5,14+',
             dynamiskeSider: lagret?.dynamiskeSider || '6-13',
@@ -1879,12 +1883,16 @@ export default function PensumPrognoseModell() {
         produktHistorikk: historikkTilEksport,
         malConfig: {
           navn: pdfMalConfig.navn,
-          filnavn: pdfMalConfig.filnavn,
+          filnavn: erPptTemplateFilnavn(pdfMalConfig.filnavn) ? pdfMalConfig.filnavn : DEFAULT_TEMPLATE_FILENAME,
           filtype: pdfMalConfig.filtype,
           filDataUrl: pdfMalConfig.filDataUrl,
           fasteSider: pdfMalConfig.fasteSider,
           dynamiskeSider: pdfMalConfig.dynamiskeSider,
           dynamiskBeskrivelse: pdfMalConfig.dynamiskBeskrivelse
+        },
+        eksponering: {
+          sektorer: aggregertPensumEksponering?.sektorer || [],
+          regioner: aggregertPensumEksponering?.regioner || []
         }
       };
       let payloadTilSending = payload;
@@ -2465,7 +2473,7 @@ export default function PensumPrognoseModell() {
               {(malKreverOpplasting || (Boolean(pdfMalConfig?.filnavn) && !pdfMalConfig?.filDataUrl)) && (
                 <div className="flex items-start gap-3 p-3 bg-amber-50 rounded-xl border border-amber-200">
                   <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
-                  <p className="text-xs text-amber-800">Malfil «{pdfMalConfig.filnavn}» er ikke tilgjengelig i denne økten. Presenter genereres uten template-merge. Last opp filen i Admin for å bruke din PPTX-mal.</p>
+                  <p className="text-xs text-amber-800">Malfil «{pdfMalConfig.filnavn}» er ikke tilgjengelig i denne økten. Presentasjonen genereres uten template-merge. Last opp filen i Admin for å bruke din PPTX-mal.</p>
                 </div>
               )}
 

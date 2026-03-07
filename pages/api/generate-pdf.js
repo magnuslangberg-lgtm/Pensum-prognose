@@ -76,7 +76,7 @@ function pickTemplateFromRepo(preferredFilename = '') {
 
   if (candidates.length === 0) return null;
 
-  const preferred = String(preferredFilename || '').trim().toLowerCase();
+  const preferred = /\.pptx?$/i.test(String(preferredFilename || '').trim()) ? String(preferredFilename || '').trim().toLowerCase() : '';
   const exactMatch = preferred
     ? candidates.find((c) => c.filename.toLowerCase() === preferred)
     : null;
@@ -189,6 +189,15 @@ function normalizeData(data) {
       };
     });
 
+  const eksponeringSektorer = (Array.isArray(data?.eksponering?.sektorer) ? data.eksponering.sektorer : [])
+    .map((r) => ({ navn: r?.navn || 'Ukjent', vekt: num(r?.vekt) }))
+    .filter((r) => r.vekt > 0)
+    .slice(0, 8);
+  const eksponeringRegioner = (Array.isArray(data?.eksponering?.regioner) ? data.eksponering.regioner : [])
+    .map((r) => ({ navn: r?.navn || 'Ukjent', vekt: num(r?.vekt) }))
+    .filter((r) => r.vekt > 0)
+    .slice(0, 8);
+
   return {
     kundeNavn: data.kundeNavn || 'Investor',
     risikoProfil: data.risikoProfil || 'Moderat',
@@ -204,6 +213,8 @@ function normalizeData(data) {
     yearlyWorld,
     productRows,
     monthlyRows: historyRows.length > 0 ? historyRows : [{ year: '2026', vals: Array(12).fill(0) }],
+    eksponeringSektorer,
+    eksponeringRegioner,
     malConfig: data.malConfig || {}
   };
 }
@@ -215,15 +226,26 @@ function calcRiskRows(monthlyRows = []) {
     const mean = vals.reduce((a, b) => a + b, 0) / n;
     const variance = vals.reduce((a, b) => a + ((b - mean) ** 2), 0) / n;
     const vol = Math.sqrt(variance) * Math.sqrt(12) * 100;
+    let acc = 100;
+    let peak = 100;
+    let maxDrawdown = 0;
+    vals.forEach((m) => {
+      acc *= (1 + m);
+      peak = Math.max(peak, acc);
+      const dd = peak > 0 ? ((acc - peak) / peak) * 100 : 0;
+      maxDrawdown = Math.min(maxDrawdown, dd);
+    });
     const annual = (((1 + mean) ** 12) - 1) * 100;
     return {
       year: r.year,
       annual: Number(annual.toFixed(2)),
       vol: Number(vol.toFixed(2)),
-      sharpe: Number((vol > 0 ? ((annual - 3) / vol) : 0).toFixed(2))
+      sharpe: Number((vol > 0 ? ((annual - 3) / vol) : 0).toFixed(2)),
+      maxDrawdown: Number(maxDrawdown.toFixed(2))
     };
   });
 }
+
 
 function buildPage(pptx, d, pageNo) {
   const s = pptx.addSlide();
@@ -278,13 +300,27 @@ function buildPage(pptx, d, pageNo) {
   if (pageNo === 11) {
     const riskRows = calcRiskRows(d.monthlyRows);
     s.addTable([
-      ['Serie', 'Årlig avkastning', 'Volatilitet', 'Sharpe'],
-      ...riskRows.map((r) => [r.year, `${r.annual.toFixed(1)}%`, `${r.vol.toFixed(1)}%`, `${r.sharpe.toFixed(2)}`])
+      ['Serie', 'Årlig avkastning', 'Volatilitet', 'Sharpe', 'Max Drawdown'],
+      ...riskRows.map((r) => [r.year, `${r.annual.toFixed(1)}%`, `${r.vol.toFixed(1)}%`, `${r.sharpe.toFixed(2)}`, `${r.maxDrawdown.toFixed(1)}%`])
     ], { x: 0.9, y: 1.9, w: 11.8, fontSize: 11, border: { pt: 1, color: COLORS.line } });
   }
   if (pageNo === 12) {
     s.addTable([['År', ...MONTHS, 'År'], ...d.monthlyRows.map((r) => [r.year, ...r.vals.map((v) => v.toFixed(1)), r.vals.reduce((a, b) => a + b, 0).toFixed(1)])], { x: 0.8, y: 1.9, w: 12, colW: [0.8, ...Array(12).fill(0.75), 1.0], fontSize: 9 });
   }
+
+  if (pageNo === 13) {
+    s.addText('Eksponeringsoversikt fra Pensum-løsninger', { x: 0.9, y: 1.65, w: 11.8, h: 0.4, fontSize: 13, color: COLORS.muted });
+    const sekt = d.eksponeringSektorer.length ? d.eksponeringSektorer : [{ navn: 'Ingen data', vekt: 0 }];
+    const regi = d.eksponeringRegioner.length ? d.eksponeringRegioner : [{ navn: 'Ingen data', vekt: 0 }];
+    s.addChart(pptx.ChartType.bar, [{ name: 'Sektorer', labels: sekt.map((r) => r.navn), values: sekt.map((r) => r.vekt) }], {
+      x: 0.9, y: 2.1, w: 5.7, h: 3.6, showLegend: false, barDir: 'bar'
+    });
+    s.addChart(pptx.ChartType.bar, [{ name: 'Regioner', labels: regi.map((r) => r.navn), values: regi.map((r) => r.vekt) }], {
+      x: 6.95, y: 2.1, w: 5.7, h: 3.6, showLegend: false, barDir: 'bar'
+    });
+    s.addText('Kilde: Aggregert eksponering (vektet) fra valgte produkter i Pensum-løsninger.', { x: 0.9, y: 5.95, w: 11.8, h: 0.35, fontSize: 11, color: COLORS.muted });
+  }
+
   if (pageNo >= 14) {
     s.addText('Standardside fra generatoren (fallback ved manglende mal-placeholder).', { x: 0.9, y: 2.0, w: 11.2, h: 0.6, fontSize: 14, color: COLORS.text });
   }
