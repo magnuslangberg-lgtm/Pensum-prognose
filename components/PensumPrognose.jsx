@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { DATAFEED_KILDE, DATAFEED_PRODUKT_HISTORIKK } from '../data/pensumDatafeedHistorikk';
 
 const PENSUM_LOGO = 'data:image/webp;base64,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';
 
@@ -90,9 +91,59 @@ function validerSiderFormat(tekst) {
   return biter.every((bit) => /^(\d+|\d+-\d+|\d+\+)$/.test(bit));
 }
 
+function skalerVekterTilHundreListe(items = []) {
+  const liste = Array.isArray(items) ? items.map((i) => ({ ...i })) : [];
+  if (liste.length === 0) return liste;
+  const total = liste.reduce((s, i) => s + (Number(i.vekt) || 0), 0);
+  if (total <= 0) {
+    const lik = Number((100 / liste.length).toFixed(1));
+    const fordelt = liste.map((i) => ({ ...i, vekt: lik }));
+    const sum = fordelt.reduce((s, i) => s + i.vekt, 0);
+    fordelt[0].vekt = Number((fordelt[0].vekt + (100 - sum)).toFixed(1));
+    return fordelt;
+  }
+  const skalert = liste.map((i) => ({ ...i, vekt: Number((((Number(i.vekt) || 0) / total) * 100).toFixed(1)) }));
+  const sum = skalert.reduce((s, i) => s + i.vekt, 0);
+  const diff = Number((100 - sum).toFixed(1));
+  if (Math.abs(diff) > 0) skalert[0].vekt = Number((skalert[0].vekt + diff).toFixed(1));
+  return skalert;
+}
+
+function fordelRestVektListe(items = [], index, newVekt) {
+  const liste = Array.isArray(items) ? items.map((i) => ({ ...i })) : [];
+  if (liste.length === 0 || index < 0 || index >= liste.length) return liste;
+  const clamped = Math.max(0, Math.min(100, Number(newVekt) || 0));
+  liste[index].vekt = Number(clamped.toFixed(1));
+  const andreIdx = liste.map((_, i) => i).filter((i) => i !== index);
+  if (andreIdx.length === 0) {
+    liste[index].vekt = 100;
+    return liste;
+  }
+  const rest = 100 - liste[index].vekt;
+  const sumAndre = andreIdx.reduce((s, i) => s + (Number(liste[i].vekt) || 0), 0);
+  if (sumAndre <= 0) {
+    const lik = Number((rest / andreIdx.length).toFixed(1));
+    andreIdx.forEach((i) => { liste[i].vekt = lik; });
+  } else {
+    andreIdx.forEach((i) => {
+      const andel = (Number(liste[i].vekt) || 0) / sumAndre;
+      liste[i].vekt = Number((andel * rest).toFixed(1));
+    });
+  }
+  const sum = liste.reduce((s, i) => s + i.vekt, 0);
+  const diff = Number((100 - sum).toFixed(1));
+  if (Math.abs(diff) > 0) {
+    const justerIdx = andreIdx[0] ?? index;
+    liste[justerIdx].vekt = Number((liste[justerIdx].vekt + diff).toFixed(1));
+  }
+  return liste;
+}
+
 
 const RAPPORT_MAANED = '2026-02';
 const RAPPORT_DATO_ISO = '2026-02-28';
+const DEFAULT_TEMPLATE_FILENAME = 'Mal - Forslag til investeringsportefølje 2026.pptx';
+const erPptTemplateFilnavn = (filnavn = '') => /\.(ppt|pptx)$/i.test(String(filnavn || '').trim());
 const RAPPORT_DATO_OBJEKT = (() => {
   const [d, m, y] = RAPPORT_DATO.split('.').map(Number);
   return new Date(y, m - 1, d);
@@ -113,6 +164,25 @@ const parseHistorikkDato = (datoStr) => {
   }
   const parsed = new Date(trimmed);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
+const byggMaanedssluttSerie = (historikkData = []) => {
+  if (!Array.isArray(historikkData)) return [];
+  const sortert = [...historikkData]
+    .filter((punkt) => parseHistorikkDato(punkt?.dato) && erGyldigTall(punkt?.verdi))
+    .sort((a, b) => parseHistorikkDato(a.dato) - parseHistorikkDato(b.dato));
+
+  const maanedsMap = new Map();
+  sortert.forEach((punkt) => {
+    const dato = parseHistorikkDato(punkt.dato);
+    const maanedKey = `${dato.getFullYear()}-${String(dato.getMonth() + 1).padStart(2, '0')}`;
+    const eksisterende = maanedsMap.get(maanedKey);
+    if (!eksisterende || dato >= parseHistorikkDato(eksisterende.dato)) {
+      maanedsMap.set(maanedKey, { dato: maanedKey, verdi: punkt.verdi });
+    }
+  });
+
+  return Array.from(maanedsMap.values()).sort((a, b) => parseHistorikkDato(a.dato) - parseHistorikkDato(b.dato));
 };
 
 const formatHistorikkEtikett = (datoStr) => {
@@ -215,6 +285,8 @@ export default function PensumPrognoseModell() {
   const [activeTab, setActiveTab] = useState('input');
   const [showPessimistic, setShowPessimistic] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
+  const [autoRebalanserAllokering, setAutoRebalanserAllokering] = useState(true);
+  const [autoRebalanserPensum, setAutoRebalanserPensum] = useState(true);
   const [expandedCategories, setExpandedCategories] = useState({ aksjer: false, renter: false });
   const [expandedKundeKategorier, setExpandedKundeKategorier] = useState({ likvide: true, illikvide: true, pe: false, eiendom: false });
 
@@ -590,7 +662,7 @@ export default function PensumPrognoseModell() {
   };
 
   // State for historikkdata og visning
-  const [produktHistorikk, setProduktHistorikk] = useState(() => oppdaterHistorikkTilRapportDato(defaultProduktHistorikk));
+  const [produktHistorikk, setProduktHistorikk] = useState(() => oppdaterHistorikkTilRapportDato(DATAFEED_PRODUKT_HISTORIKK));
   const [historikkPeriode, setHistorikkPeriode] = useState('5y'); // 1y, 3y, 5y, max
   const [valgteProdukterHistorikk, setValgteProdukterHistorikk] = useState(['global-core-active', 'global-edge', 'basis']);
   
@@ -634,13 +706,13 @@ export default function PensumPrognoseModell() {
     return true;
   };
   const [pdfMalConfig, setPdfMalConfig] = useState({
-    navn: '',
-    filnavn: '',
+    navn: 'Pensum standardmal 2026',
+    filnavn: DEFAULT_TEMPLATE_FILENAME,
     filtype: '',
     filDataUrl: '',
-    fasteSider: '1-3,10+',
-    dynamiskeSider: '4-9',
-    dynamiskBeskrivelse: 'Side 4: Porteføljen i dag\nSide 5: Aksjeandel vs verdensindeks\nSide 6: Verdensindeksen\nSide 7: Pensums porteføljeforslag\nSide 8: Avkastning\nSide 9: Risiko og månedstabeller'
+    fasteSider: '1-5,14+',
+    dynamiskeSider: '6-13',
+    dynamiskBeskrivelse: 'Side 6: Allokering\nSide 7: Beløpsfordeling\nSide 8: Produkter 2026/2025\nSide 9: Produkter 2024/2023/2022\nSide 10: Avkastningsgraf\nSide 11: Risikomål\nSide 12: Månedstabell\nSide 13: Oppsummering'
   });
 
   const MAX_TEMPLATE_PAYLOAD_BYTES = 4.0 * 1024 * 1024;
@@ -656,6 +728,14 @@ export default function PensumPrognoseModell() {
     erGyldigFasteSider &&
     erGyldigDynamiskeSider
   ), [pdfMalConfig, erGyldigFasteSider, erGyldigDynamiskeSider]);
+  const malKreverOpplasting = useMemo(() => {
+    const filnavn = String(pdfMalConfig?.filnavn || '').trim();
+    if (!filnavn) return false;
+    const erStandardmal = filnavn.toLowerCase() === DEFAULT_TEMPLATE_FILENAME.toLowerCase();
+    if (erStandardmal) return false;
+    if (!erPptTemplateFilnavn(filnavn)) return true;
+    return !pdfMalConfig?.filDataUrl;
+  }, [pdfMalConfig?.filnavn, pdfMalConfig?.filDataUrl]);
   
   // Standard avkastningsrater (kan endres av admin)
   const [avkastningsrater, setAvkastningsrater] = useState({
@@ -711,7 +791,16 @@ export default function PensumPrognoseModell() {
 
         const malValue = await storageGet('pensum_admin_pdf_mal');
         if (malValue) {
-          setPdfMalConfig({ ...JSON.parse(malValue), filDataUrl: '' });
+          const lagret = JSON.parse(malValue);
+          setPdfMalConfig((prev) => ({
+            ...prev,
+            ...lagret,
+            filnavn: erPptTemplateFilnavn(lagret?.filnavn) ? lagret.filnavn : DEFAULT_TEMPLATE_FILENAME,
+            navn: lagret?.navn || 'Pensum standardmal 2026',
+            fasteSider: lagret?.fasteSider || '1-5,14+',
+            dynamiskeSider: lagret?.dynamiskeSider || '6-13',
+            filDataUrl: ''
+          }));
         }
       } catch (e) {
         console.log('Kunne ikke laste admin-data:', e);
@@ -812,36 +901,115 @@ export default function PensumPrognoseModell() {
   };
 
   const oppdaterPensumVekt = (id, nyVekt) => {
-    setPensumAllokering(prev => prev.map(p => p.id === id ? { ...p, vekt: Math.max(0, Math.min(100, nyVekt)) } : p));
+    setPensumAllokering(prev => {
+      const idx = prev.findIndex((p) => p.id === id);
+      if (idx < 0) return prev;
+      if (!autoRebalanserPensum) {
+        return prev.map(p => p.id === id ? { ...p, vekt: Math.max(0, Math.min(100, nyVekt)) } : p);
+      }
+      return fordelRestVektListe(prev, idx, nyVekt);
+    });
   };
 
+  const [pensumDragVekter, setPensumDragVekter] = useState({});
+  const startPensumDrag = (id, value) => {
+    setPensumDragVekter((prev) => ({ ...prev, [id]: value }));
+  };
+  const commitPensumDrag = (id) => {
+    const nyVekt = pensumDragVekter[id];
+    if (!erGyldigTall(nyVekt)) return;
+    oppdaterPensumVekt(id, Number(nyVekt));
+    setPensumDragVekter((prev) => {
+      const neste = { ...prev };
+      delete neste[id];
+      return neste;
+    });
+  };
+
+  const normaliserPensumTil100 = useCallback(() => {
+    setPensumAllokering((prev) => skalerVekterTilHundreListe(prev));
+  }, []);
+
   const pensumTotalVekt = pensumAllokering.reduce((s, p) => s + p.vekt, 0);
+
+  const aggregertPensumEksponering = useMemo(() => {
+    const totalVekt = pensumAllokering.reduce((s, p) => s + (p.vekt || 0), 0) || 1;
+    const lagAgg = (felt) => {
+      const map = new Map();
+      pensumAllokering.forEach((p) => {
+        const data = produktEksponering?.[p.id]?.[felt];
+        if (!Array.isArray(data) || p.vekt <= 0) return;
+        const faktor = p.vekt / totalVekt;
+        data.forEach((rad) => {
+          const key = rad.navn;
+          map.set(key, (map.get(key) || 0) + ((Number(rad.vekt) || 0) * faktor));
+        });
+      });
+      return Array.from(map.entries())
+        .map(([navn, vekt]) => ({ navn, vekt: Number(vekt.toFixed(1)) }))
+        .sort((a, b) => b.vekt - a.vekt)
+        .slice(0, 8);
+    };
+    return {
+      sektorer: lagAgg('sektorer'),
+      regioner: lagAgg('regioner')
+    };
+  }, [pensumAllokering, produktEksponering]);
 
   // Beregn vektet historisk avkastning
   const beregnPensumHistorikk = useMemo(() => {
     const alleProdukt = [...pensumProdukter.enkeltfond, ...pensumProdukter.fondsportefoljer, ...pensumProdukter.alternative];
     const aarKolonner = HISTORIKK_ARFELT;
+    const aarMapping = { aar2026: 2026, aar2025: 2025, aar2024: 2024, aar2023: 2023, aar2022: 2022 };
     const resultat = {};
-    
-    aarKolonner.forEach(aar => {
+
+    const beregnFraHistorikk = (produktId, aar) => {
+      const hist = produktHistorikk?.[produktId];
+      const data = Array.isArray(hist?.data) ? hist.data : [];
+      const sortert = data
+        .filter((punkt) => erGyldigTall(punkt?.verdi) && parseHistorikkDato(punkt?.dato))
+        .sort((a, b) => parseHistorikkDato(a.dato) - parseHistorikkDato(b.dato));
+      if (sortert.length < 2) return null;
+
+      const startDato = new Date(aar, 0, 1);
+      const sluttDato = aar === 2026 ? RAPPORT_DATO_OBJEKT : new Date(aar, 11, 31);
+
+      const startKandidat = sortert.filter((punkt) => parseHistorikkDato(punkt.dato) <= startDato).slice(-1)[0]
+        || sortert.find((punkt) => parseHistorikkDato(punkt.dato) >= startDato);
+      const sluttKandidat = sortert.filter((punkt) => {
+        const dato = parseHistorikkDato(punkt.dato);
+        return dato && dato >= startDato && dato <= sluttDato;
+      }).slice(-1)[0];
+
+      if (!startKandidat || !sluttKandidat || startKandidat === sluttKandidat || !erGyldigTall(startKandidat.verdi) || startKandidat.verdi === 0) return null;
+      return ((sluttKandidat.verdi / startKandidat.verdi) - 1) * 100;
+    };
+
+    aarKolonner.forEach((aarFelt) => {
       let vektetSum = 0;
       let totalVekt = 0;
-      pensumAllokering.forEach(allok => {
-        const produkt = alleProdukt.find(p => p.id === allok.id);
-        if (produkt && allok.vekt > 0) {
-          // For alternative investeringer, bruk forventet avkastning
-          const avkastning = produkt[aar] !== null ? produkt[aar] : (produkt.forventetAvkastning || null);
-          if (avkastning !== null) {
-            vektetSum += avkastning * allok.vekt;
-            totalVekt += allok.vekt;
-          }
+      pensumAllokering.forEach((allok) => {
+        const produkt = alleProdukt.find((p) => p.id === allok.id);
+        if (!produkt || allok.vekt <= 0) return;
+
+        let avkastning = erGyldigTall(produkt?.[aarFelt]) ? Number(produkt[aarFelt]) : null;
+        if (!erGyldigTall(avkastning)) {
+          avkastning = beregnFraHistorikk(produkt.id, aarMapping[aarFelt]);
+        }
+        if (!erGyldigTall(avkastning) && erGyldigTall(produkt?.forventetAvkastning)) {
+          avkastning = Number(produkt.forventetAvkastning);
+        }
+
+        if (erGyldigTall(avkastning)) {
+          vektetSum += avkastning * allok.vekt;
+          totalVekt += allok.vekt;
         }
       });
-      resultat[aar] = totalVekt > 0 ? vektetSum / totalVekt : null;
+      resultat[aarFelt] = totalVekt > 0 ? vektetSum / totalVekt : null;
     });
-    
+
     return resultat;
-  }, [pensumAllokering, pensumProdukter]);
+  }, [pensumAllokering, pensumProdukter, produktHistorikk]);
 
   // Beregn aktivafordeling (aksjer vs renter vs alternativer)
   const pensumAktivafordeling = useMemo(() => {
@@ -1512,11 +1680,14 @@ export default function PensumPrognoseModell() {
 
   const updateAllokeringVekt = useCallback((index, newVekt) => {
     setAllokering(prev => {
-      const updated = [...prev];
-      updated[index] = { ...updated[index], vekt: newVekt };
-      return updated;
+      if (!autoRebalanserAllokering) {
+        const updated = [...prev];
+        updated[index] = { ...updated[index], vekt: Math.max(0, Math.min(100, Number(newVekt) || 0)) };
+        return updated;
+      }
+      return fordelRestVektListe(prev, index, newVekt);
     });
-  }, []);
+  }, [autoRebalanserAllokering]);
 
   const updateAllokeringBelop = useCallback((index, newBelop) => {
     setAllokering(prev => {
@@ -1529,6 +1700,10 @@ export default function PensumPrognoseModell() {
 
   const updateAllokeringAvkastning = useCallback((index, avk) => {
     setAllokering(prev => { const u = [...prev]; u[index] = { ...u[index], avkastning: parseFloat(avk) || 0 }; return u; });
+  }, []);
+
+  const normaliserAllokeringTil100 = useCallback(() => {
+    setAllokering((prev) => skalerVekterTilHundreListe(prev));
   }, []);
 
   const toggleCategory = (cat) => setExpandedCategories(p => ({ ...p, [cat]: !p[cat] }));
@@ -1670,6 +1845,32 @@ export default function PensumPrognoseModell() {
   const handleGeneratePresentation = async () => {
     setPdfLoading(true);
     try {
+      const valgteProduktIrapport = pdfProduktValg.length > 0 ? pdfProduktValg : Object.keys(PRODUKT_NAVN_MAP_PDF);
+      const historikkTilEksport = valgteProduktIrapport.reduce((acc, id) => {
+        const hist = produktHistorikk?.[id];
+        if (!hist || !Array.isArray(hist.data)) return acc;
+        acc[id] = {
+          ...hist,
+          data: hist.data.slice(-120)
+        };
+        return acc;
+      }, {});
+
+      const produktMap = [...(pensumProdukter?.enkeltfond || []), ...(pensumProdukter?.fondsportefoljer || [])]
+        .reduce((acc, p) => { if (p?.id) acc[p.id] = p; return acc; }, {});
+      const pensumProdukterTilEksport = valgteProduktIrapport
+        .map((id) => produktMap[id])
+        .filter(Boolean)
+        .map((p) => ({
+          id: p.id,
+          navn: p.navn,
+          aar2026: p.aar2026,
+          aar2025: p.aar2025,
+          aar2024: p.aar2024,
+          aar2023: p.aar2023,
+          aar2022: p.aar2022
+        }));
+
       const payload = {
         kundeNavn: kundeNavn || 'Investor',
         totalKapital,
@@ -1677,17 +1878,21 @@ export default function PensumPrognoseModell() {
         horisont,
         vektetAvkastning,
         allokering: aktiveAktiva,
-        produkterIBruk: pdfProduktValg.length > 0 ? pdfProduktValg : Object.keys(PRODUKT_NAVN_MAP_PDF),
-        pensumProdukter,
-        produktHistorikk,
+        produkterIBruk: valgteProduktIrapport,
+        pensumProdukter: pensumProdukterTilEksport,
+        produktHistorikk: historikkTilEksport,
         malConfig: {
           navn: pdfMalConfig.navn,
-          filnavn: pdfMalConfig.filnavn,
+          filnavn: erPptTemplateFilnavn(pdfMalConfig.filnavn) ? pdfMalConfig.filnavn : DEFAULT_TEMPLATE_FILENAME,
           filtype: pdfMalConfig.filtype,
           filDataUrl: pdfMalConfig.filDataUrl,
           fasteSider: pdfMalConfig.fasteSider,
           dynamiskeSider: pdfMalConfig.dynamiskeSider,
           dynamiskBeskrivelse: pdfMalConfig.dynamiskBeskrivelse
+        },
+        eksponering: {
+          sektorer: aggregertPensumEksponering?.sektorer || [],
+          regioner: aggregertPensumEksponering?.regioner || []
         }
       };
       let payloadTilSending = payload;
@@ -1706,25 +1911,45 @@ export default function PensumPrognoseModell() {
         serializedPayload = JSON.stringify(payloadTilSending);
       }
 
-      const res = await fetch('/api/generate-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: serializedPayload,
-      });
-      if (!res.ok) {
-        let melding = await res.text();
-        try {
-          const parsed = JSON.parse(melding);
-          if (parsed?.error) melding = parsed.error;
-        } catch (_) {
-          // behold rå melding
+      const fetchPresentation = async (requestPayload) => {
+        const response = await fetch('/api/generate-pdf', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestPayload),
+        });
+        if (!response.ok) {
+          let melding = await response.text();
+          try {
+            const parsed = JSON.parse(melding);
+            if (parsed?.error) melding = parsed.error;
+          } catch (_) {
+            // behold rå melding
+          }
+          throw new Error(melding || 'Ukjent feil fra server.');
         }
-        throw new Error(melding || 'Ukjent feil fra server.');
-      }
+        return response;
+      };
 
-      const outputFormat = res.headers.get('x-pensum-output-format') || '';
+      let res = await fetchPresentation(payloadTilSending);
+      let outputFormat = res.headers.get('x-pensum-output-format') || '';
       const templateWarningRaw = res.headers.get('x-pensum-template-warning') || '';
       const templateWarning = templateWarningRaw ? decodeURIComponent(templateWarningRaw) : '';
+      const templateReplacements = Number(res.headers.get('x-pensum-template-replacements') || 0);
+      const manglerPlaceholders = outputFormat === 'pptx-template' && templateReplacements === 0;
+
+      if (manglerPlaceholders) {
+        res = await fetchPresentation({
+          ...payloadTilSending,
+          skipTemplateMerge: true,
+          malConfig: {
+            ...payloadTilSending.malConfig,
+            filDataUrl: '',
+            filtype: ''
+          }
+        });
+        outputFormat = res.headers.get('x-pensum-output-format') || outputFormat;
+      }
+
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -1744,6 +1969,8 @@ export default function PensumPrognoseModell() {
         alert('PowerPoint er midlertidig utilgjengelig i miljøet. Du fikk PDF som fallback.');
       } else if (templateDroppetPgaStorrelse) {
         alert('Malfilen var for stor for serverless-request. Presentasjonen ble generert uten template-merge. Komprimer malen (bilder) for å bruke full mal.');
+      } else if (manglerPlaceholders) {
+        alert('Malen inneholdt ingen gjenkjennbare placeholders for dynamiske felter. Derfor ble presentasjonen automatisk generert med datadrevne sider (6–13) fra verktøyet.');
       } else if (outputFormat === 'pptx-generated' && templateWarning) {
         alert('Template-merge ble hoppet over: ' + templateWarning + ' Presentasjonen ble laget med standardgeneratoren.');
       }
@@ -1810,8 +2037,15 @@ export default function PensumPrognoseModell() {
   const AllokeringRow = ({ item, index, isSubItem }) => {
     const [localVekt, setLocalVekt] = useState(item.vekt.toString());
     const [localBelop, setLocalBelop] = useState(formatNumber((item.vekt / 100) * effektivtInvestertBelop));
-    useEffect(() => { setLocalVekt(item.vekt.toFixed(1)); setLocalBelop(formatNumber((item.vekt / 100) * effektivtInvestertBelop)); }, [item.vekt, effektivtInvestertBelop]);
-    
+    const [dragVekt, setDragVekt] = useState(item.vekt);
+    useEffect(() => {
+      setLocalVekt(item.vekt.toFixed(1));
+      setLocalBelop(formatNumber((item.vekt / 100) * effektivtInvestertBelop));
+      setDragVekt(item.vekt);
+    }, [item.vekt, effektivtInvestertBelop]);
+
+    const commitDragVekt = () => updateAllokeringVekt(index, Number(dragVekt) || 0);
+
     return (
       <tr className={"border-b border-gray-100 hover:bg-gray-50 " + (isSubItem ? "bg-gray-50" : "")}>
         <td className={"py-3 pr-4 " + (isSubItem ? "pl-10" : "pl-4")}>
@@ -1821,9 +2055,24 @@ export default function PensumPrognoseModell() {
           </div>
         </td>
         <td className="py-3 px-2">
-          <div className="flex items-center justify-center">
-            <input type="text" value={localVekt} onChange={(e) => setLocalVekt(e.target.value)} onBlur={() => updateAllokeringVekt(index, parseFloat(localVekt) || 0)} className="w-16 text-center text-sm border border-gray-200 rounded py-1.5 px-2" />
-            <span className="ml-1 text-gray-400 text-xs">%</span>
+          <div className="space-y-1">
+            <div className="flex items-center justify-center gap-1.5">
+              <button onClick={() => updateAllokeringVekt(index, (item.vekt || 0) - 0.5)} className="w-6 h-6 rounded border border-gray-200 text-gray-600 hover:bg-gray-100">−</button>
+              <input type="text" value={localVekt} onChange={(e) => setLocalVekt(e.target.value)} onBlur={() => { const v = parseFloat(localVekt) || 0; setDragVekt(v); updateAllokeringVekt(index, v); }} className="w-16 text-center text-sm border border-gray-200 rounded py-1.5 px-2" />
+              <span className="text-gray-400 text-xs">%</span>
+              <button onClick={() => updateAllokeringVekt(index, (item.vekt || 0) + 0.5)} className="w-6 h-6 rounded border border-gray-200 text-gray-600 hover:bg-gray-100">+</button>
+            </div>
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="0.5"
+              value={dragVekt}
+              onChange={(e) => setDragVekt(parseFloat(e.target.value) || 0)}
+              onMouseUp={commitDragVekt}
+              onTouchEnd={commitDragVekt}
+              className="w-full accent-blue-700"
+            />
           </div>
         </td>
         <td className="py-3 px-2">
@@ -2224,7 +2473,7 @@ export default function PensumPrognoseModell() {
               {malKreverOpplasting && (
                 <div className="flex items-start gap-3 p-3 bg-amber-50 rounded-xl border border-amber-200">
                   <svg className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
-                  <p className="text-xs text-amber-800">Malfil «{pdfMalConfig.filnavn}» er ikke tilgjengelig i denne økten. Presenter genereres uten template-merge. Last opp filen i Admin for å bruke din PPTX-mal.</p>
+                  <p className="text-xs text-amber-800">Malfil «{pdfMalConfig.filnavn}» er ikke tilgjengelig i denne økten. Presentasjonen genereres uten template-merge. Last opp filen i Admin for å bruke din PPTX-mal.</p>
                 </div>
               )}
 
@@ -2585,6 +2834,15 @@ export default function PensumPrognoseModell() {
                     </div>
                   )}
                   <div className="p-6 overflow-x-auto">
+                    <div className="flex flex-wrap items-center justify-end gap-2 mb-3">
+                      <label className="flex items-center gap-2 text-xs text-gray-600 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1">
+                        <input type="checkbox" checked={autoRebalanserAllokering} onChange={(e) => setAutoRebalanserAllokering(e.target.checked)} className="w-3.5 h-3.5" />
+                        Auto-balanser til 100%
+                      </label>
+                      <button onClick={normaliserAllokeringTil100} className="text-xs px-3 py-1 rounded-lg border border-blue-200 text-blue-700 hover:bg-blue-50">
+                        Juster til 100%
+                      </button>
+                    </div>
                     <table className="w-full">
                       <thead>
                         <tr style={{ backgroundColor: PENSUM_COLORS.lightGray }}>
@@ -2858,13 +3116,20 @@ export default function PensumPrognoseModell() {
                     <h4 className="font-semibold mb-4 flex items-center justify-between" style={{ color: PENSUM_COLORS.darkBlue }}>
                       <span>Din portefølje</span>
                       <div className="flex items-center gap-3">
+                        <label className="text-xs px-2 py-1 rounded-full border border-blue-200 text-blue-700 flex items-center gap-1.5">
+                          <input type="checkbox" checked={autoRebalanserPensum} onChange={(e) => setAutoRebalanserPensum(e.target.checked)} className="w-3.5 h-3.5" />
+                          Auto 100%
+                        </label>
+                        <button onClick={normaliserPensumTil100} className="text-xs px-2.5 py-1 rounded-full border border-blue-200 text-blue-700 hover:bg-blue-50">
+                          Juster til 100%
+                        </button>
                         {pensumLikviditet.illikvid > 0 && (
                           <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700">
                             {pensumLikviditet.illikvid}% illikvid
                           </span>
                         )}
-                        <span className={"text-sm px-3 py-1 rounded-full " + (pensumTotalVekt === 100 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
-                          Total: {pensumTotalVekt}%
+                        <span className={"text-sm px-3 py-1 rounded-full " + (Math.abs(pensumTotalVekt - 100) < 0.2 ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700")}>
+                          Total: {pensumTotalVekt.toFixed(1)}%
                         </span>
                       </div>
                     </h4>
@@ -2898,9 +3163,30 @@ export default function PensumPrognoseModell() {
                               <p className="text-xs text-gray-500">{produkt.kategori === 'enkeltfond' ? 'Enkeltfond' : produkt.kategori === 'alternative' ? 'Alternativ investering' : 'Fondsportefølje'}</p>
                             </div>
                             <div className="flex items-center gap-2">
-                              <input type="range" min="0" max="100" value={produkt.vekt} onChange={(e) => oppdaterPensumVekt(produkt.id, parseInt(e.target.value))} className="w-24" />
-                              <input type="number" min="0" max="100" value={produkt.vekt} onChange={(e) => oppdaterPensumVekt(produkt.id, parseInt(e.target.value) || 0)} className="w-16 border border-gray-200 rounded py-1 px-2 text-sm text-right" />
+                              <button onClick={() => oppdaterPensumVekt(produkt.id, (produkt.vekt || 0) - 0.5)} className="w-6 h-6 rounded border border-gray-200 text-gray-600 hover:bg-gray-100">−</button>
+                              <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                step="0.5"
+                                value={pensumDragVekter[produkt.id] ?? produkt.vekt}
+                                onChange={(e) => startPensumDrag(produkt.id, parseFloat(e.target.value) || 0)}
+                                onMouseUp={() => commitPensumDrag(produkt.id)}
+                                onTouchEnd={() => commitPensumDrag(produkt.id)}
+                                className="w-36 accent-blue-700"
+                              />
+                              <input
+                                type="number"
+                                min="0"
+                                max="100"
+                                step="0.5"
+                                value={pensumDragVekter[produkt.id] ?? produkt.vekt}
+                                onChange={(e) => startPensumDrag(produkt.id, parseFloat(e.target.value) || 0)}
+                                onBlur={() => commitPensumDrag(produkt.id)}
+                                className="w-20 border border-gray-200 rounded py-1 px-2 text-sm text-right"
+                              />
                               <span className="text-sm text-gray-500">%</span>
+                              <button onClick={() => oppdaterPensumVekt(produkt.id, (produkt.vekt || 0) + 0.5)} className="w-6 h-6 rounded border border-gray-200 text-gray-600 hover:bg-gray-100">+</button>
                             </div>
                           </div>
                         );
@@ -3001,6 +3287,38 @@ export default function PensumPrognoseModell() {
                             <span className="font-semibold" style={{ color: PENSUM_COLORS.darkBlue }}>{a.value}%</span>
                           </div>
                         ))}
+                      </div>
+                    </div>
+
+                    {/* Aggregert eksponering */}
+                    <div className="pt-4 border-t border-gray-200">
+                      <h4 className="font-semibold mb-2" style={{ color: PENSUM_COLORS.darkBlue }}>Aggregert eksponering (valgte produkter)</h4>
+                      <p className="text-xs text-gray-500 mb-3">Vektet snitt av underliggende eksponeringsdata fra Pensum-produktene.</p>
+                      <div className="space-y-4 rounded-xl border border-gray-100 bg-gradient-to-br from-white to-slate-50 p-4">
+                        <div>
+                          <p className="text-xs font-semibold text-gray-600 mb-1">Sektorer (top 8)</p>
+                          <ResponsiveContainer width="100%" height={190}>
+                            <BarChart data={aggregertPensumEksponering.sektorer} layout="vertical" margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
+                              <XAxis type="number" tick={{ fontSize: 10 }} />
+                              <YAxis type="category" dataKey="navn" width={110} tick={{ fontSize: 10 }} />
+                              <Tooltip formatter={(v) => [v + '%', 'Vekt']} />
+                              <Bar dataKey="vekt" fill={PENSUM_COLORS.lightBlue} radius={[0, 4, 4, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div>
+                          <p className="text-xs font-semibold text-gray-600 mb-1">Regioner (top 8)</p>
+                          <ResponsiveContainer width="100%" height={190}>
+                            <BarChart data={aggregertPensumEksponering.regioner} layout="vertical" margin={{ top: 5, right: 10, left: 10, bottom: 5 }}>
+                              <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E5E7EB" />
+                              <XAxis type="number" tick={{ fontSize: 10 }} />
+                              <YAxis type="category" dataKey="navn" width={110} tick={{ fontSize: 10 }} />
+                              <Tooltip formatter={(v) => [v + '%', 'Vekt']} />
+                              <Bar dataKey="vekt" fill={PENSUM_COLORS.teal} radius={[0, 4, 4, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -3284,7 +3602,7 @@ export default function PensumPrognoseModell() {
                     {/* Disclaimer */}
                     <div className="mt-4 text-xs text-gray-500 p-3 bg-gray-50 rounded-lg">
                       <strong>Viktig informasjon om avkastning:</strong> Historikk er indeksert til 100 ved start av valgt periode. 
-                      Historikk er oppdatert til og med {RAPPORT_DATO} (2026 vises som YTD). For flere produkter er historikk før oppstart estimert - se produktdetaljer for mer informasjon. 
+                      Historikk er oppdatert til og med {RAPPORT_DATO} (2026 vises som YTD). Avkastning beregnes månedlig ut fra kursendringer mellom månedssluttpunkter i tidsseriene. Kilde: {DATAFEED_KILDE}. For flere produkter er historikk før oppstart estimert - se produktdetaljer for mer informasjon. 
                       Historisk avkastning er ingen garanti for fremtidig avkastning.
                     </div>
                   </div>
@@ -3409,7 +3727,7 @@ export default function PensumPrognoseModell() {
               const p = produktMap[id] || {};
               const data = Object.keys(arMapping).reduce((arAcc, ar) => {
                 const felt = arMapping[ar];
-                const v = p[felt];
+                const v = hentAarsverdiForProdukt(p, felt, Number(ar));
                 arAcc[Number(ar)] = Number.isFinite(v) ? v : null;
                 return arAcc;
               }, {});
@@ -3792,7 +4110,7 @@ export default function PensumPrognoseModell() {
           const beregnStatistikk = (id) => {
             const hist = alleHistorikk[id];
             if (!hist || !hist.data) return null;
-            const filtrert = [...hist.data]
+            const filtrert = byggMaanedssluttSerie(hist.data)
               .filter(d => {
                 const parsed = parseHistorikkDato(d.dato);
                 return parsed && parsed >= startDato && erGyldigTall(d.verdi);
@@ -3809,7 +4127,7 @@ export default function PensumPrognoseModell() {
             }
             const n = avkastninger.length;
             if (n === 0) return null;
-            const perioderPerAar = inferPerioderPerAarFraHistorikk(filtrert);
+            const perioderPerAar = 12;
             const gjennomsnitt = avkastninger.reduce((s, v) => s + v, 0) / n;
             const aarligAvkastning = ((filtrert[filtrert.length-1].verdi / filtrert[0].verdi) ** (perioderPerAar / n) - 1) * 100;
             const varians = avkastninger.reduce((s, v) => s + (v - gjennomsnitt) ** 2, 0) / n;
@@ -4066,7 +4384,7 @@ export default function PensumPrognoseModell() {
               )}
 
               <div className="text-xs text-gray-500 p-3 bg-amber-50 rounded-lg border border-amber-200">
-                <strong>Viktig informasjon:</strong> Historisk avkastning er ingen garanti for fremtidig avkastning. Sharpe Ratio er beregnet med risikofri rente på 3% p.a. Volatilitet er annualisert standardavvik basert på månedlige avkastninger. Maks Drawdown viser det størst relative kursfallet fra topp til bunn i den valgte perioden.
+                <strong>Viktig informasjon:</strong> Historisk avkastning er ingen garanti for fremtidig avkastning. Sharpe Ratio er beregnet med risikofri rente på 3% p.a. Volatilitet er annualisert standardavvik basert på månedlige avkastninger. Maks Drawdown viser det størst relative kursfallet fra topp til bunn i den valgte perioden. Store deler av historikken før fondenes oppstart er estimert. Kilde: {DATAFEED_KILDE}.
               </div>
             </div>
           );
@@ -4497,18 +4815,18 @@ export default function PensumPrognoseModell() {
                       <div>
                         <label className="text-xs font-semibold uppercase tracking-wide text-gray-500">Malfil</label>
                         <label className="mt-1 block border-2 border-dashed border-gray-300 rounded-lg p-4 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition-colors">
-                          <p className="text-sm text-gray-600">Klikk for å velge .ppt/.pptx/.pdf</p>
+                          <p className="text-sm text-gray-600">Klikk for å velge .ppt/.pptx</p>
                           <p className="text-xs text-gray-400 mt-1">Maks 15 MB</p>
                           <input
                             type="file"
-                            accept=".ppt,.pptx,.pdf,application/pdf,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                            accept=".ppt,.pptx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation"
                             className="hidden"
                             onChange={(e) => {
                               const fil = e.target.files?.[0];
                               if (!fil) return;
-                              const erGyldigType = /\.(ppt|pptx|pdf)$/i.test(fil.name);
+                              const erGyldigType = /\.(ppt|pptx)$/i.test(fil.name);
                               if (!erGyldigType) {
-                                setAdminMelding('Feil: Kun .ppt, .pptx eller .pdf støttes for malopplasting.');
+                                setAdminMelding('Feil: Kun .ppt/.pptx støttes som mal for PowerPoint-generering. PDF kan ikke brukes som template-merge-kilde.');
                                 return;
                               }
                               if (fil.size > 15 * 1024 * 1024) {
@@ -4524,7 +4842,7 @@ export default function PensumPrognoseModell() {
                                   filtype: fil.type || 'application/octet-stream',
                                   filDataUrl: typeof reader.result === 'string' ? reader.result : ''
                                 }));
-                                setAdminMelding('Mal lastet inn lokalt i nettleseren. Trykk "Lagre maloppsett" for å lagre sideoppsett i admin.');
+                                setAdminMelding('Mal lastet inn lokalt i denne økten. Ved generering brukes opplastet fil; hvis den ikke finnes brukes standardmalen fra repo automatisk.');
                               };
                               reader.onerror = () => setAdminMelding('Feil ved lesing av malfil. Prøv på nytt.');
                               reader.readAsDataURL(fil);
@@ -4591,7 +4909,7 @@ export default function PensumPrognoseModell() {
                           }
                           try {
                             await storageSet('pensum_admin_pdf_mal', JSON.stringify(stripTemplateBinaryForStorage(pdfMalConfig)));
-                            setAdminMelding('Malmapping lagret i admin. Selve malfilen lagres kun i denne nettleserøkten (for å unngå lagringskvote-feil).');
+                            setAdminMelding('Malmapping lagret i admin. Om opplastet binærfil mangler i økten brukes standardmalen fra repo automatisk.');
                           } catch (err) {
                             setAdminMelding('Feil ved lagring av maloppsett: ' + err.message);
                           }
@@ -4605,13 +4923,13 @@ export default function PensumPrognoseModell() {
                       <button
                         onClick={() => {
                           setPdfMalConfig({
-                            navn: '',
-                            filnavn: '',
+                            navn: 'Pensum standardmal 2026',
+                            filnavn: DEFAULT_TEMPLATE_FILENAME,
                             filtype: '',
                             filDataUrl: '',
-                            fasteSider: '1-3,10+',
-                            dynamiskeSider: '4-9',
-                            dynamiskBeskrivelse: 'Side 4: Porteføljen i dag\nSide 5: Aksjeandel vs verdensindeks\nSide 6: Verdensindeksen\nSide 7: Pensums porteføljeforslag\nSide 8: Avkastning\nSide 9: Risiko og månedstabeller'
+                            fasteSider: '1-5,14+',
+                            dynamiskeSider: '6-13',
+                            dynamiskBeskrivelse: 'Side 6: Allokering\nSide 7: Beløpsfordeling\nSide 8: Produkter 2026/2025\nSide 9: Produkter 2024/2023/2022\nSide 10: Avkastningsgraf\nSide 11: Risikomål\nSide 12: Månedstabell\nSide 13: Oppsummering'
                           });
                           setAdminMelding('Maloppsett nullstilt lokalt (ikke lagret).');
                         }}
@@ -4622,8 +4940,8 @@ export default function PensumPrognoseModell() {
                     </div>
 
                     <div className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg p-3">
-                      <strong>Status:</strong> Sideoppsettet lagres i admin. Malfilens binærdata holdes kun i aktiv nettleserøkt for å unngå kvote-feil i lokal lagring.
-                      For template-merge må malfil lastes opp i samme økt før generering.
+                      <strong>Status:</strong> Sideoppsettet lagres i admin. Standardmalen <code>{DEFAULT_TEMPLATE_FILENAME}</code> brukes automatisk fra repo i produksjon/lokalt.
+                      Opplasting er valgfri overstyring per økt (nyttig ved testing av alternative maler).
                     </div>
                     <div className="text-xs text-gray-500">
                       Gyldige sideformater: <code>1-3,10+</code>, <code>4-9</code>, <code>2,5,7</code>.
