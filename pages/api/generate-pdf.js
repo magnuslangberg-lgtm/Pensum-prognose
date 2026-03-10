@@ -482,6 +482,9 @@ export default async function handler(req, res) {
     if (templateData && /presentationml|ms-powerpoint/.test(templateData.mime)) {
       try {
         const { buffer, replacements } = await applyTemplatePptx(templateData.buffer, data);
+        if (replacements === 0) {
+          throw new Error('Ingen placeholders funnet i valgt mal (0 erstatninger)');
+        }
         const filnavn = `Pensum_Investeringsforslag_${(data.kundeNavn || 'Kunde').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pptx`;
         res.setHeader('X-Pensum-Output-Format', replacements === 0 ? 'pptx-template-raw' : 'pptx-template');
         res.setHeader('X-Pensum-Template-Source', templateData.source || 'upload');
