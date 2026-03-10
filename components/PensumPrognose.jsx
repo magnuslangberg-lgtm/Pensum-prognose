@@ -3167,7 +3167,7 @@ export default function PensumPrognoseModell() {
               </div>
               
               <div className="p-6">
-                <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 xl:grid-cols-1 gap-6">
                   {/* Venstre: Allokering */}
                   <div className="xl:col-span-2">
                     <h4 className="font-semibold mb-4 flex items-center justify-between" style={{ color: PENSUM_COLORS.darkBlue }}>
