@@ -964,6 +964,30 @@ export default function PensumPrognoseModell() {
     [valgtePensumProdukterMedEksponering, aktivEksponeringProduktId]
   );
 
+  const aggregertPensumEksponering = useMemo(() => {
+    const totalVekt = pensumAllokering.reduce((sum, p) => sum + (Number(p.vekt) || 0), 0) || 1;
+    const lagAgg = (felt) => {
+      const map = new Map();
+      pensumAllokering.forEach((p) => {
+        const data = produktEksponering?.[p.id]?.[felt];
+        if (!Array.isArray(data) || (Number(p.vekt) || 0) <= 0) return;
+        const faktor = (Number(p.vekt) || 0) / totalVekt;
+        data.forEach((rad) => {
+          const key = rad?.navn || 'Ukjent';
+          map.set(key, (map.get(key) || 0) + ((Number(rad?.vekt) || 0) * faktor));
+        });
+      });
+      return Array.from(map.entries())
+        .map(([navn, vekt]) => ({ navn, vekt: Number(vekt.toFixed(1)) }))
+        .sort((a, b) => b.vekt - a.vekt)
+        .slice(0, 8);
+    };
+    return {
+      sektorer: lagAgg('sektorer'),
+      regioner: lagAgg('regioner')
+    };
+  }, [pensumAllokering, produktEksponering]);
+
   // Beregn vektet historisk avkastning
   const beregnPensumHistorikk = useMemo(() => {
     const alleProdukt = [...pensumProdukter.enkeltfond, ...pensumProdukter.fondsportefoljer, ...pensumProdukter.alternative];
@@ -1890,6 +1914,19 @@ export default function PensumPrognoseModell() {
           aar2022: p.aar2022
         }));
 
+      const produktEksponeringTilEksport = valgteProduktIrapport.reduce((acc, id) => {
+        const eksponering = produktEksponering?.[id];
+        if (!eksponering) return acc;
+        acc[id] = {
+          underliggende: Array.isArray(eksponering.underliggende) ? eksponering.underliggende.slice(0, 10) : [],
+          regioner: Array.isArray(eksponering.regioner) ? eksponering.regioner.slice(0, 8) : [],
+          sektorer: Array.isArray(eksponering.sektorer) ? eksponering.sektorer.slice(0, 8) : [],
+          stil: Array.isArray(eksponering.stil) ? eksponering.stil.slice(0, 8) : [],
+          disclaimer: eksponering.disclaimer || ''
+        };
+        return acc;
+      }, {});
+
       const payload = {
         kundeNavn: kundeNavn || 'Investor',
         totalKapital,
@@ -1899,6 +1936,7 @@ export default function PensumPrognoseModell() {
         allokering: aktiveAktiva,
         produkterIBruk: valgteProduktIrapport,
         pensumProdukter: pensumProdukterTilEksport,
+        produktEksponering: produktEksponeringTilEksport,
         produktHistorikk: historikkTilEksport,
         malConfig: {
           navn: pdfMalConfig.navn,
