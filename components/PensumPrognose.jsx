@@ -1070,24 +1070,35 @@ export default function PensumPrognoseModell() {
     return { likvid: likvidVekt, illikvid: illikvidVekt };
   }, [pensumAllokering, pensumProdukter]);
 
+  const hentForventetAvkastningProdukt = (produkt) => {
+    if (!produkt) return null;
+    const primary = Number(produkt?.rapport?.expectedReturn);
+    if (Number.isFinite(primary)) return primary;
+
+    const secondary = Number(produkt?.forventetAvkastning);
+    if (Number.isFinite(secondary)) return secondary;
+
+    return null;
+  };
+
   // Beregn forventet avkastning for Pensum-portefølje
   const pensumForventetAvkastning = useMemo(() => {
     const alleProdukt = [...pensumProdukter.enkeltfond, ...pensumProdukter.fondsportefoljer, ...pensumProdukter.alternative];
     let vektetSum = 0;
-    let totalVekt = 0;
-    
-    pensumAllokering.forEach(allok => {
-      const produkt = alleProdukt.find(p => p.id === allok.id);
-      if (produkt && allok.vekt > 0) {
-        // Bruk 3-års annualisert eller forventet avkastning
-        const nokkeltall = beregnProduktNokkeltall(produkt);
-        const avkastning = nokkeltall.aarlig3ar || produkt.forventetAvkastning || produkt.aar2024 || 0;
-        vektetSum += avkastning * allok.vekt;
-        totalVekt += allok.vekt;
-      }
+    let totalVektMedForventning = 0;
+
+    pensumAllokering.forEach((allok) => {
+      const produkt = alleProdukt.find((p) => p.id === allok.id);
+      if (!produkt || allok.vekt <= 0) return;
+
+      const avkastning = hentForventetAvkastningProdukt(produkt);
+      if (!Number.isFinite(avkastning)) return;
+
+      vektetSum += avkastning * allok.vekt;
+      totalVektMedForventning += allok.vekt;
     });
-    
-    return totalVekt > 0 ? vektetSum / totalVekt : 0;
+
+    return totalVektMedForventning > 0 ? vektetSum / totalVektMedForventning : 0;
   }, [pensumAllokering, pensumProdukter]);
 
   
@@ -3389,8 +3400,8 @@ export default function PensumPrognoseModell() {
                                     <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
                                       <p className="text-[11px] uppercase tracking-wide text-slate-500">Forv. avkastning</p>
                                       <p className="text-xl font-semibold mt-1" style={{ color: PENSUM_COLORS.green }}>
-                                        {erGyldigTall(aktivtEksponeringsProdukt.rapport?.expectedReturn)
-                                          ? `${aktivtEksponeringsProdukt.rapport.expectedReturn}%`
+                                        {erGyldigTall(hentForventetAvkastningProdukt(aktivtEksponeringsProdukt))
+                                          ? `${hentForventetAvkastningProdukt(aktivtEksponeringsProdukt)}%`
                                           : '—'}
                                       </p>
                                     </div>
@@ -3497,8 +3508,8 @@ export default function PensumPrognoseModell() {
 
                                       <div className="text-slate-500">Avkastning</div>
                                       <div className="text-right text-slate-700">
-                                        {erGyldigTall(aktivtEksponeringsProdukt.rapport?.expectedReturn)
-                                          ? `${aktivtEksponeringsProdukt.rapport.expectedReturn}%`
+                                        {erGyldigTall(hentForventetAvkastningProdukt(aktivtEksponeringsProdukt))
+                                          ? `${hentForventetAvkastningProdukt(aktivtEksponeringsProdukt)}%`
                                           : '—'}
                                       </div>
 
