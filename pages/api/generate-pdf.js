@@ -486,10 +486,13 @@ export default async function handler(req, res) {
           throw new Error('Ingen placeholders funnet i valgt mal (0 erstatninger)');
         }
         const filnavn = `Pensum_Investeringsforslag_${(data.kundeNavn || 'Kunde').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.pptx`;
-        res.setHeader('X-Pensum-Output-Format', 'pptx-template');
+        res.setHeader('X-Pensum-Output-Format', replacements === 0 ? 'pptx-template-raw' : 'pptx-template');
         res.setHeader('X-Pensum-Template-Source', templateData.source || 'upload');
         res.setHeader('X-Pensum-Template-Applied', `${data?.malConfig?.fasteSider || '1-5,14+'}|${data?.malConfig?.dynamiskeSider || '6-13'}`);
         res.setHeader('X-Pensum-Template-Replacements', String(replacements));
+        if (replacements === 0) {
+          res.setHeader('X-Pensum-Template-Warning', encodeURIComponent('Ingen placeholders funnet i valgt mal (0 erstatninger). Returnerer malfilen slik den er.'));
+        }
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
         res.setHeader('Content-Disposition', `attachment; filename="${filnavn}"`);
         return res.send(buffer);

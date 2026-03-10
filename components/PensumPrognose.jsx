@@ -1993,6 +1993,7 @@ export default function PensumPrognoseModell() {
       const templateWarning = templateWarningRaw ? decodeURIComponent(templateWarningRaw) : '';
       const templateReplacements = Number(res.headers.get('x-pensum-template-replacements') || 0);
       const manglerPlaceholders = outputFormat === 'pptx-template' && templateReplacements === 0;
+      const brukteRaaMal = outputFormat === 'pptx-template-raw';
 
       if (manglerPlaceholders) {
         res = await fetchPresentation({
@@ -2028,6 +2029,8 @@ export default function PensumPrognoseModell() {
         alert('Malfilen var for stor for serverless-request. Presentasjonen ble generert uten template-merge. Komprimer malen (bilder) for å bruke full mal.');
       } else if (manglerPlaceholders) {
         alert('Malen inneholdt ingen gjenkjennbare placeholders for dynamiske felter. Derfor ble presentasjonen automatisk generert med datadrevne sider (6–13) fra verktøyet.');
+      } else if (brukteRaaMal) {
+        alert('Malen inneholdt ingen placeholders. Presentasjonen ble derfor levert med den opplastede malen slik den er.');
       } else if (outputFormat === 'pptx-generated' && templateWarning) {
         alert('Template-merge ble hoppet over: ' + templateWarning + ' Presentasjonen ble laget med standardgeneratoren.');
       }
